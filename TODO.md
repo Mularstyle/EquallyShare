@@ -16,8 +16,10 @@
 
 ## Next
 
+- [ ] **Blocker before Task 4:** choose how to run on Vercel (hosted DB + Blob + external realtime/polling, or Vercel frontend + separate Node backend). See Project.md Open Decisions.
+- [ ] Add Creator-only End share: endpoint, `ended` status that rejects joins, realtime broadcast, and button in Creator UI.
 - [ ] Add revision-safe WebSocket broadcasting, reconnect snapshots, heartbeat, and exact 24-hour expiration cleanup (Task 4).
 - [ ] Build Creator/Recipient React UI, QR fallback state, Web Locks bootstrap, and responsive states.
-- [ ] Add Playwright multi-browser/restart tests and bounded demo load test.
+- [ ] Add Playwright multi-browser/restart tests and bounded demo load test (64 recipients; #65 gets `429 RECIPIENT_LIMIT`).
 - [ ] Add production static serving, Docker packaging, setup/demo documentation, and update Project.md with verified results.
-- [ ] Verify public HTTPS/mobile QR flow after a hosting target is authorized.
+- [ ] Verify public HTTPS/mobile QR flow on Vercel.

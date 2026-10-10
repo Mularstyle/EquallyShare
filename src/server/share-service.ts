@@ -16,7 +16,7 @@ export class ShareError extends Error {
 }
 
 export class ShareService {
-  constructor(private readonly db: DatabaseSync, private readonly clock: Clock = Date.now, private readonly options: { shareTtlHours: number; maxTextGraphemes: number; maxRecipients: number } = { shareTtlHours: 24, maxTextGraphemes: 20_000, maxRecipients: 256 }) {}
+  constructor(private readonly db: DatabaseSync, private readonly clock: Clock = Date.now, private readonly options: { shareTtlHours: number; maxTextGraphemes: number; maxRecipients: number } = { shareTtlHours: 24, maxTextGraphemes: 20_000, maxRecipients: 64 }) {}
 
   createText(visitorId: VisitorId, text: string): RecipientSnapshot {
     if (typeof text !== "string" || text.trim().length === 0) throw new ShareError("INVALID_TEXT", 400, "Text is required");

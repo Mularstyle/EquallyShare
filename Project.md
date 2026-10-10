@@ -40,6 +40,10 @@ Last updated: 2026-10-10 (Asia/Bangkok)
 11. แก้ต้นฉบับหลังสร้าง share ไม่ได้; หากต้องการเปลี่ยนข้อมูลให้สร้าง share ใหม่
 12. Share หมดอายุ 24 ชั่วโมงนับจากเวลาสร้าง
 13. หากข้อความไม่พอแบ่ง ยังรับผู้รับเพิ่มตามปกติ ผู้รับที่ได้ส่วนว่างเห็นข้อความระบบ **“คุณได้รับข้อมูล 0 ตัวอักษร”** ไม่ถือเป็น error และไม่หยุดการแชร์
+14. Creator มีปุ่ม **End share** เพื่อปิด share ก่อนหมดอายุ 24 ชั่วโมง หลังปิดแล้วไม่รับผู้รับใหม่และหน้าที่เปิดอยู่เปลี่ยนเป็นสถานะ ended (ยืนยัน 2026-10-10)
+15. รับข้อความด้วยช่องพิมพ์/วางเท่านั้น ยังไม่รองรับการอัปโหลด `.txt` (ยืนยัน 2026-10-10)
+16. ผู้ชมที่คาดว่าจะเข้าร่วมในเดโมคือ 64 คน; ค่าเริ่มต้นของ `MAX_RECIPIENTS` เป็น 64 (ยืนยัน 2026-10-10)
+17. Hosting target คือ **Vercel** (ยืนยัน 2026-10-10) ดูข้อขัดแย้งกับ architecture ปัจจุบันใน Open Decisions
 
 ### Canonical Example
 
@@ -82,6 +86,7 @@ Last updated: 2026-10-10 (Asia/Bangkok)
 - AI/ML หรือ model API
 - บัญชีผู้ใช้ โปรไฟล์ ห้องแชต และระบบชำระเงิน
 - รวมชิ้นส่วนกลับหรือดาวน์โหลดต้นฉบับจากหน้า Recipient
+- อัปโหลดไฟล์ `.txt`
 - แก้ต้นฉบับหลังมีผู้รับเข้าร่วม
 - ระบบระดับ production เช่น multi-region deployment และระบบจัดการองค์กร
 
@@ -215,7 +220,7 @@ Implementation plan เลือก stack ต่อไปนี้ และ Tas
 ### Technical
 
 - ต้องตรวจ input ที่ backend: ข้อความว่าง ไฟล์ที่ไม่ใช่ภาพ และขนาด/มิติที่เกินขีดจำกัด
-- ค่าเริ่มต้นใน implementation plan คือ JSON body 256 KiB, text 20,000 grapheme clusters, upload 5 MiB, decoded image 12 megapixels, normalized longest edge 1024 px และ 256 Recipients ต่อ share; ค่าเหล่านี้เป็น operational limits ที่ปรับผ่าน environment ได้ ไม่ใช่กติกาที่บอกว่าข้อมูลหมดแล้วห้ามคนใหม่
+- ค่าเริ่มต้นใน implementation plan คือ JSON body 256 KiB, text 20,000 grapheme clusters, upload 5 MiB, decoded image 12 megapixels, normalized longest edge 1024 px และ 64 Recipients ต่อ share (ตามขนาดผู้ชมที่คาดไว้); ค่าเหล่านี้เป็น operational limits ที่ปรับผ่าน environment ได้ ไม่ใช่กติกาที่บอกว่าข้อมูลหมดแล้วห้ามคนใหม่
 - ต้องแสดง text เป็นข้อความ ไม่ตีความเป็น HTML หรือ script
 - ข้อเสนอชนิดภาพสำหรับเริ่มต้น: PNG, JPEG, WebP โดยไม่รับ SVG หรือ animated image ในรอบแรก
 - Concurrent joins และ reconnect ต้องไม่ทำให้จำนวนผู้รับเพี้ยน
@@ -264,10 +269,13 @@ Status: **Tasks 1–3 complete and reviewed; realtime/UI/production work remains
 
 ## Open Decisions
 
-1. Hosting target จริงและ persistent volume ที่จะใช้สำหรับ public/mobile demo; ยังไม่มีการอนุมัติค่าใช้จ่ายหรือ provider
-2. จำนวนคนที่คาดว่าจะใช้ระหว่างเดโม เพื่อปรับ operational limit จากค่าเริ่มต้น 256 และซ้อมโหลดให้ตรงงานจริง
-3. ต้องเพิ่ม `.txt` upload หลัง MVP หรือช่องพิมพ์/วางเพียงพอ
-4. ต้องเพิ่ม End share ก่อนหมดอายุหลัง MVP หรือใช้สร้าง share ใหม่สำหรับแต่ละรอบ; Reset ผู้รับใน URL เดิมยังไม่ได้ตกลง
+ตัดสินแล้ว 2026-10-10: hosting = Vercel, ผู้ชม 64 คน, ยังไม่รับ `.txt`, เพิ่ม End share (ดู Confirmed Requirements 14–17)
+
+1. **Vercel ขัดกับ architecture ปัจจุบัน:** Vercel Functions เป็น serverless ไม่มี persistent disk สำหรับ `node:sqlite`/`DATA_DIR` และไม่รัน WebSocket server (`ws`) ระยะยาว ต้องเลือกแนวทางก่อนเริ่ม Task 4:
+   - (a) ย้าย state ไป hosted database (เช่น Postgres/Redis ผ่าน Vercel Marketplace), ภาพไป Vercel Blob และ realtime ไปบริการ pub/sub ภายนอก หรือ polling
+   - (b) Frontend บน Vercel และ backend Node ตัวเดิมบน host ที่มี persistent volume + WebSocket
+   ยังไม่ได้เลือกแนวทางและยังไม่อนุมัติค่าใช้จ่าย
+2. Reset ผู้รับใน URL เดิมยังไม่ได้ตกลง (End share แล้วสร้าง share ใหม่ใช้แทนได้)
 
 Implementation plan และ code ที่ทำแล้วใช้ deterministic 32×32 tile stream, exact pixel quota และ shelf-packed collage; ใช้ HttpOnly browser session cookie และ SQLite/local persistent storage บน single instance ส่วน Web Locks ยังรอ Task 5/6 การเลือกเหล่านี้เป็น implementation decisions ที่บันทึกไว้ใน `docs/decisions.md`
 

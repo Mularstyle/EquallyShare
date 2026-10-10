@@ -24,3 +24,11 @@
 - Alternatives: random crops, a single strip, or a client-side full image with CSS masking.
 - Consequences: Rendering cost grows with recipients; image limits and a render semaphore protect the single-process demo.
 
+
+## Demo Product Decisions (2026-10-10)
+
+- Context: Project.md listed open decisions on hosting, audience size, `.txt` upload and ending a share early.
+- Decision: Host on Vercel; expected audience is 64, so `MAX_RECIPIENTS` defaults to 64; text input stays type/paste only (no `.txt` upload); the Creator gets an End share action that closes the share before the 24-hour expiry.
+- Reason: User decision for the hackathon demo.
+- Alternatives: Container host with persistent volume; 256-recipient default; `.txt` upload; one new share per demo round instead of End share.
+- Consequences: Load test targets 64 joins and expects #65 to get `429 RECIPIENT_LIMIT`. End share needs a Creator-only endpoint, an `ended` share status that rejects joins, and a realtime broadcast to open pages. Vercel conflicts with the single-process SQLite + `ws` design (no persistent disk, no long-lived WebSocket server); the storage/realtime approach must be chosen before Task 4 and recorded here.

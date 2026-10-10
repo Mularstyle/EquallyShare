@@ -22,10 +22,11 @@
 - Share หมดอายุเมื่อ `now >= expiresAt`; join หรือ reconnect ไม่ต่ออายุ
 - ข้อความว่างจากการหารเป็นผลลัพธ์ปกติและต้องแสดงข้อความตรงตัวว่า `คุณได้รับข้อมูล 0 ตัวอักษร`
 - เป้าหมาย deployment คือ Node process เดียวพร้อม persistent volume; multi-instance อยู่พ้น MVP
+- **อัปเดต 2026-10-10:** ผู้ใช้เลือก hosting เป็น Vercel ซึ่งขัดกับข้อด้านบน ต้องเลือกแนวทาง storage/realtime ก่อน Task 4 (ดู `docs/decisions.md`) และต้องเพิ่ม End share (Creator ปิด share ก่อนหมดอายุ)
 - ใช้ `PUBLIC_ORIGIN` สร้าง URL/QR และตรวจ HTTP/WebSocket origin; ห้ามเชื่อ Host header ที่ผู้ใช้ส่งมา
 - Runtime baseline คือ Node 22 ที่ตรวจว่า `DatabaseSync` ใช้งานได้แล้ว โมดูล `node:sqlite` ยังมีสถานะ experimental ใน Node 22 จึงต้อง pin Node 22 ใน runtime และมี repository tests ครอบ persistence
 - Package versions ต้อง resolve ให้รองรับ Node 22 และบันทึกใน `package-lock.json` ตอนลงมือทำ ห้ามเดาเลขเวอร์ชันในแผน
-- Input/resource limits ค่าเริ่มต้น: JSON body 256 KiB, text 20,000 grapheme clusters, image upload 5 MiB, decoded image 12 megapixels, normalized longest edge 1024 px, cumulative Recipients สูงสุด 256 คนต่อ share และ concurrent collage renders 4 งานต่อ process ทุกค่า override ได้ด้วย environment variables
+- Input/resource limits ค่าเริ่มต้น: JSON body 256 KiB, text 20,000 grapheme clusters, image upload 5 MiB, decoded image 12 megapixels, normalized longest edge 1024 px, cumulative Recipients สูงสุด 64 คนต่อ share (ขนาดผู้ชมที่ยืนยัน 2026-10-10) และ concurrent collage renders 4 งานต่อ process ทุกค่า override ได้ด้วย environment variables
 - จำกัดชนิดภาพเป็น PNG, JPEG และ static WebP; reject animated/malformed/spoofed files จาก decoded metadata ไม่ใช้แค่ extension หรือ MIME ที่ client แจ้ง
 - ไม่ commit/push อัตโนมัติ แต่ละ task จบด้วย checkpoint ที่ตรวจ diff และผล test; commit เมื่อผู้ใช้สั่งเท่านั้น
 - ห้ามอ้างว่า mobile/public deployment ผ่านจนกว่าจะทดสอบกับ HTTPS URL และอุปกรณ์หรือ browser context ที่แยกจริง
@@ -86,7 +87,7 @@ tests/integration/shares.test.ts     Identity, join, persistence and text API
 tests/integration/images.test.ts     Validation, rendering and data isolation
 tests/integration/realtime.test.ts   Broadcast, reconnect and expiration behavior
 tests/e2e/share.spec.ts              Creator/recipient browser demo flows
-tests/load/demo-load.ts              Bounded 1→256 join smoke test
+tests/load/demo-load.ts              Bounded 1→64 join smoke test
 
 Dockerfile                           Pinned Node 22 single-instance image
 .dockerignore                        Minimal Docker build context
@@ -634,7 +635,7 @@ test("ninth recipient sees exact zero-character message", async ({ browser }) =>
 ```
 - [ ] Run `npm run test:e2e -- tests/e2e/share.spec.ts` and `npm test -- tests/integration/shares.test.ts`; expected result is FAIL in the restart/clock/multi-context harness paths that do not exist yet, while earlier product tests remain passing.
 - [ ] Add only the harness hooks needed for repeatable startup, clock and restart; keep them unavailable unless `NODE_ENV=test` and an in-process test dependency supplies them.
-- [ ] Implement `tests/load/demo-load.ts`: create one text and one representative image share, join 256 unique cookie jars with bounded concurrency, assert final `recipientCount=256`, monotonic revisions and acceptable responses; attempt #257 and assert `429 RECIPIENT_LIMIT`. Report elapsed time and peak process memory without imposing an unmeasured pass threshold.
+- [ ] Implement `tests/load/demo-load.ts`: create one text and one representative image share, join 64 unique cookie jars with bounded concurrency, assert final `recipientCount=64`, monotonic revisions and acceptable responses; attempt #65 and assert `429 RECIPIENT_LIMIT`. Report elapsed time and peak process memory without imposing an unmeasured pass threshold.
 - [ ] Run `npm run test:e2e`, `npm run load:demo`, `npm test`, `npm run typecheck` and `npm run build`; expected result is all correctness checks passing and load script completing without crashes/unhandled rejections.
 - [ ] Manually run the browser flow at desktop and mobile viewport widths, including copy URL and QR rendering. Record findings in `docs/demo.md`; do not claim a physical phone/public network test yet.
 - [ ] Checkpoint: preserve Playwright traces/screenshots only for failures; inspect final data directory and process logs for secrets, original payloads and unexpected unhandled errors.

@@ -38,7 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     sessionTtlHours: integer("SESSION_TTL_HOURS", 168, 1),
     shareTtlHours: integer("SHARE_TTL_HOURS", 24, 1),
     maxTextGraphemes: integer("MAX_TEXT_GRAPHEMES", 20_000, 1),
-    maxRecipients: integer("MAX_RECIPIENTS", 256, 1),
+    maxRecipients: integer("MAX_RECIPIENTS", 64, 1),
     maxUploadBytes: integer("MAX_UPLOAD_BYTES", 5_242_880, 1),
     maxImagePixels: integer("MAX_IMAGE_PIXELS", 12_000_000, 1),
     maxImageEdge: integer("MAX_IMAGE_EDGE", 1024, 1),
