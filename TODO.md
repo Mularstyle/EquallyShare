@@ -15,6 +15,8 @@
 
 - [x] MP4 video shares (time segments by keyframe, direct upload to storage up to 50 MB), including live database migration.
 
+- [x] PDF shares (page ranges per recipient), including live database migration.
+
 ## In progress
 
 - ไม่มีงานค้างจาก checkpoint นี้

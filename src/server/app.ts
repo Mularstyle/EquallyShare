@@ -7,6 +7,7 @@ import type { ApiError, CreateShareResponse, EndShareResponse, RecipientSnapshot
 import type { ServerConfig } from "./config.js";
 import { IdentityService, type Clock } from "./identity.js";
 import { AudioService } from "./audio-service.js";
+import { PdfService } from "./pdf-service.js";
 import { ffmpegAvailable, VideoService } from "./video-service.js";
 import { ImageService } from "./image-service.js";
 import { FileImageStore, SupabaseImageStore, type ImageStore } from "./image-store.js";
@@ -38,6 +39,7 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
   const shares = new ShareService(sql, clock, config);
   const images = new ImageService(imageStore, config.maxImagePixels, config.maxImageEdge);
   const audio = new AudioService(imageStore);
+  const pdf = new PdfService(imageStore);
   const video = new VideoService();
   // Video cuts run ffmpeg; queue them so a burst of joins cannot start dozens of processes at once.
   let activeCuts = 0;
@@ -53,6 +55,7 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
   const uploader = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes, files: 1, fields: 0, parts: 1 } });
   const upload = uploader.single("image");
   const uploadAudio = uploader.single("audio");
+  const uploadPdf = uploader.single("pdf");
   let activeRenders = 0;
   const allowedOrigin = config.publicOrigin;
 
@@ -141,6 +144,27 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
     } catch (error) { next(error); }
   });
 
+  app.post("/api/shares/pdf", async (request, _response, next) => {
+    try { await visitor(request); next(); }
+    catch (error) { next(error); }
+  }, uploadPdf, async (request, response, next) => {
+    try {
+      const visitorId = await visitor(request);
+      const file = request.file;
+      if (!file) throw new ShareError("INVALID_PDF", 415, "PDF file is required");
+      if (file.mimetype !== "application/pdf") throw new ShareError("INVALID_PDF", 415, "Invalid or unsupported PDF");
+      const stored = await pdf.normalizeAndStore(file.buffer, randomUUID());
+      let snapshot: RecipientSnapshot;
+      try { snapshot = await shares.createPdf(visitorId, stored); }
+      catch (error) { await pdf.deleteSource(stored.path); throw error; }
+      const shareUrl = `${config.publicOrigin}/s/${encodeURIComponent(snapshot.shareId)}`;
+      let qrDataUrl: string | null = null;
+      try { qrDataUrl = await QRCode.toDataURL(shareUrl); }
+      catch { /* The committed share remains usable. */ }
+      response.status(201).json({ shareUrl, qrDataUrl, qrStatus: qrDataUrl ? "ready" : "unavailable", snapshot } satisfies CreateShareResponse);
+    } catch (error) { next(error); }
+  });
+
   app.post("/api/shares/:shareId/join", async (request, response, next) => {
     try {
       const { snapshot, joined } = await shares.join(String(request.params.shareId), await visitor(request));
@@ -177,6 +201,7 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
       for (const path of imagePaths) {
         try {
           if (path.endsWith(".mp3")) await audio.deleteSource(path);
+          else if (path.endsWith(".pdf")) await pdf.deleteSource(path);
           else if (path.endsWith(".mp4")) {
             const shareId = path.slice(0, -4);
             await video.forget(path);
@@ -352,10 +377,28 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
     } catch (error) { next(error); }
   });
 
+  // This Recipient's page range only, as a new PDF; the original never leaves the server.
+  app.get("/api/shares/:shareId/pdf", async (request, response, next) => {
+    response.setHeader("Cache-Control", "private, no-store");
+    try {
+      const visitorId = await visitor(request);
+      const shareId = String(request.params.shareId);
+      const revisionText = request.query.revision;
+      if (typeof revisionText !== "string" || !/^[1-9]\d*$/.test(revisionText) || !Number.isSafeInteger(Number(revisionText))) throw new ShareError("STALE_REVISION", 409, "Valid revision required");
+      const range = await shares.getPdf(shareId, visitorId);
+      if (Number(revisionText) !== range.snapshot.revision) {
+        response.status(409).json({ code: "STALE_REVISION", message: "Share revision changed", currentRevision: range.snapshot.revision, recipientCount: range.snapshot.recipientCount });
+        return;
+      }
+      if (range.count === 0) { response.status(204).end(); return; }
+      response.type("application/pdf").send(await pdf.renderPages(range.path, range.start, range.count));
+    } catch (error) { next(error); }
+  });
+
   const errors: ErrorRequestHandler = (error: unknown, request, response, _next) => {
     if (error instanceof multer.MulterError) {
       const tooLarge = error.code === "LIMIT_FILE_SIZE";
-      const invalid = request.path.endsWith("/audio") ? "INVALID_AUDIO" : "INVALID_IMAGE";
+      const invalid = request.path.endsWith("/audio") ? "INVALID_AUDIO" : request.path.endsWith("/pdf") ? "INVALID_PDF" : "INVALID_IMAGE";
       response.status(tooLarge ? 413 : 415).json({ code: tooLarge ? "UPLOAD_TOO_LARGE" : invalid, message: tooLarge ? "File exceeds upload limit" : "Invalid upload" } satisfies ApiError);
       return;
     }
@@ -372,6 +415,8 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
       response.status(413).json({ code: upload ? "UPLOAD_TOO_LARGE" : "TEXT_TOO_LARGE", message: "Request body too large" } satisfies ApiError);
       return;
     }
+    // The client gets a generic message; the cause goes to the server log (Vercel function logs).
+    console.error(`Unhandled error on ${request.method} ${request.path}`, error);
     response.status(500).json({ code: "INTERNAL_ERROR", message: "Unexpected server error" } satisfies ApiError);
   };
   app.use(errors);

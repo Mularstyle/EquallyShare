@@ -1,9 +1,9 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Film, FileText, Image as ImageIcon, Music } from "lucide-react";
+import { BookOpen, Film, FileText, Image as ImageIcon, Music } from "lucide-react";
 import MediaDropzone from "./MediaDropzone";
 import TextInput from "./TextInput";
 
-export type ContentDraft = { type: "text"; text: string } | { type: "image" | "audio" | "video"; file: File | undefined };
+export type ContentDraft = { type: "text"; text: string } | { type: "image" | "audio" | "video" | "pdf"; file: File | undefined };
 
 interface ContentInputProps {
   content: ContentDraft;
@@ -19,7 +19,7 @@ function TabButton({ active, onClick, disabled, children }: { active: boolean; o
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
-      className={`flex-1 py-2 px-2 sm:px-4 font-semibold transition-all border-2 ${active ? "bg-white border-gray-400 shadow-inner" : "border-t-white border-l-white border-r-gray-600 border-b-gray-600"}`}
+      className={`flex-1 py-2 px-1 sm:px-4 text-xs sm:text-base font-semibold [&>svg]:hidden sm:[&>svg]:inline transition-all border-2 ${active ? "bg-white border-gray-400 shadow-inner" : "border-t-white border-l-white border-r-gray-600 border-b-gray-600"}`}
       style={active ? {} : { background: "#ECE9D8", boxShadow: "1px 1px 0 rgba(0,0,0,0.1), inset -1px -1px 0 rgba(0,0,0,0.1)" }}
     >
       {children}
@@ -27,7 +27,7 @@ function TabButton({ active, onClick, disabled, children }: { active: boolean; o
   );
 }
 
-/** One original per share: text, a single image, a single MP3 or a single MP4. */
+/** One original per share: text, or a single image, MP3, MP4 or PDF. */
 export default function ContentInput({ content, onChange, onReject, disabled }: ContentInputProps) {
   return (
     <div className="space-y-4">
@@ -54,6 +54,10 @@ export default function ContentInput({ content, onChange, onReject, disabled }: 
         <TabButton active={content.type === "video"} onClick={() => content.type !== "video" && onChange({ type: "video", file: undefined })} disabled={disabled}>
           <Film size={16} className="inline mr-2" />
           MP4
+        </TabButton>
+        <TabButton active={content.type === "pdf"} onClick={() => content.type !== "pdf" && onChange({ type: "pdf", file: undefined })} disabled={disabled}>
+          <BookOpen size={16} className="inline mr-2" />
+          PDF
         </TabButton>
       </div>
 

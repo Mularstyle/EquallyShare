@@ -13,6 +13,7 @@ export const acceptedAudioTypes = ["audio/mpeg", "audio/mp3"];
 /** Videos upload straight to storage, so they may be larger than other files. */
 export const maxVideoUploadBytes = 50 * 1024 * 1024;
 export const acceptedVideoTypes = ["video/mp4"];
+export const acceptedPdfTypes = ["application/pdf"];
 
 let sessionReady: Promise<void> | undefined;
 
@@ -84,6 +85,13 @@ export async function createVideoShare(file: File, onProgress: (fraction: number
   return request("/api/shares/video", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ uploadId: slot.uploadId }) });
 }
 
+export async function createPdfShare(file: File): Promise<CreateShareResponse> {
+  await ensureSession();
+  const form = new FormData();
+  form.append("pdf", file.type === "application/pdf" ? file : new File([file], file.name, { type: "application/pdf" }));
+  return request("/api/shares/pdf", { method: "POST", body: form });
+}
+
 export async function joinShare(shareId: string): Promise<RecipientSnapshot> {
   await ensureSession();
   return request(`/api/shares/${encodeURIComponent(shareId)}/join`, { method: "POST" });
@@ -117,6 +125,7 @@ const messages: Partial<Record<ClientErrorCode, string>> = {
   INVALID_IMAGE: "รองรับเฉพาะภาพ PNG, JPEG หรือ WebP ที่ไม่ใช่ภาพเคลื่อนไหว",
   INVALID_AUDIO: "รองรับเฉพาะไฟล์เสียง MP3",
   INVALID_VIDEO: "รองรับเฉพาะวิดีโอ MP4 (H.264 แนะนำ) ที่มีภาพ",
+  INVALID_PDF: "รองรับเฉพาะ PDF ที่ไม่ได้ใส่รหัสผ่าน",
   UPLOAD_NOT_FOUND: "อัปโหลดไม่สำเร็จหรือหมดเวลา ลองใหม่อีกครั้ง",
   UPLOAD_TOO_LARGE: "ไฟล์ใหญ่เกินกำหนด (วิดีโอ 50 MB, ไฟล์อื่น 4 MB)",
   SHARE_NOT_FOUND: "ไม่พบ share นี้",

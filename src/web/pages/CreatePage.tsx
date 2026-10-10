@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, Scissors, Users } from "lucide-react";
-import { createAudioShare, createImageShare, createTextShare, createVideoShare, errorMessage } from "../api";
+import { createAudioShare, createImageShare, createPdfShare, createTextShare, createVideoShare, errorMessage } from "../api";
 import ContentInput, { type ContentDraft } from "../components/ContentInput";
 import GenerateButton from "../components/GenerateButton";
 import ShatterTransition from "../components/ShatterTransition";
@@ -17,7 +17,7 @@ type State = "idle" | "creating" | "shattering";
 
 function HowItWorks() {
   const rows = [
-    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ข้อความ ภาพ เพลง MP3 หรือวิดีโอ MP4 ถูกแบ่งให้ผู้รับทุกคนคนละส่วน (เพลงและวิดีโอแบ่งเป็นช่วงเวลาต่อกัน)" },
+    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ข้อความ ภาพ เพลง MP3 วิดีโอ MP4 หรือ PDF ถูกแบ่งให้ผู้รับทุกคนคนละส่วน (เพลงและวิดีโอแบ่งตามช่วงเวลา PDF แบ่งตามหน้า)" },
     { icon: <Users size={18} />, text: "คุณคือผู้รับ #1 · ทุกคนที่เปิดลิงก์หรือสแกน QR ทำให้ส่วนของทุกคนเล็กลงทันที (สูงสุด 64 คน)" },
     { icon: <Clock size={18} />, text: "แก้ต้นฉบับไม่ได้ · share หมดอายุใน 24 ชั่วโมง หรือเมื่อคุณกด End share" },
   ];
@@ -59,7 +59,7 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
     if (content.type === "text") {
       if (content.text.trim().length === 0) return "พิมพ์ข้อความก่อนแชร์";
       if (countUnits(content.text) > maxTextUnits) return "ข้อความยาวเกินไป";
-    } else if (!content.file) return content.type === "image" ? "เลือกภาพก่อนแชร์" : content.type === "audio" ? "เลือกไฟล์ MP3 ก่อนแชร์" : "เลือกวิดีโอ MP4 ก่อนแชร์";
+    } else if (!content.file) return { image: "เลือกภาพก่อนแชร์", audio: "เลือกไฟล์ MP3 ก่อนแชร์", video: "เลือกวิดีโอ MP4 ก่อนแชร์", pdf: "เลือกไฟล์ PDF ก่อนแชร์" }[content.type];
     return undefined;
   };
 
@@ -74,6 +74,7 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
       const response = content.type === "text" ? await createTextShare(content.text)
         : content.type === "image" ? await createImageShare(content.file!)
         : content.type === "audio" ? await createAudioShare(content.file!)
+        : content.type === "pdf" ? await createPdfShare(content.file!)
         : await createVideoShare(content.file!, setProgress);
       setCreatedId(response.snapshot.shareId);
       setState("shattering");

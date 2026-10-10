@@ -40,8 +40,9 @@ export const schemaSql = `
   ALTER TABLE shares ADD COLUMN IF NOT EXISTS audio_sample_rate INTEGER;
   ALTER TABLE shares ADD COLUMN IF NOT EXISTS audio_samples_per_frame INTEGER;
   ALTER TABLE shares ADD COLUMN IF NOT EXISTS video_index TEXT;
+  ALTER TABLE shares ADD COLUMN IF NOT EXISTS pdf_page_count INTEGER;
   ALTER TABLE shares DROP CONSTRAINT IF EXISTS shares_content_type_check;
-  ALTER TABLE shares ADD CONSTRAINT shares_content_type_check CHECK (content_type IN ('text', 'image', 'audio', 'video'));
+  ALTER TABLE shares ADD CONSTRAINT shares_content_type_check CHECK (content_type IN ('text', 'image', 'audio', 'video', 'pdf'));
   CREATE TABLE IF NOT EXISTS pending_uploads (
     id UUID PRIMARY KEY,
     visitor_id UUID NOT NULL,

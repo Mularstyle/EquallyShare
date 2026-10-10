@@ -6,10 +6,11 @@ import { allocateGridCell } from "../core/collage.js";
 import type { ApiErrorCode, RecipientSnapshot } from "../shared/contracts.js";
 import type { Clock, VisitorId } from "./identity.js";
 import type { StoredAudio } from "./audio-service.js";
+import type { StoredPdf } from "./pdf-service.js";
 import type { StoredImage } from "./image-service.js";
 import type { Queryable, Sql } from "./sql.js";
 
-type ShareRow = { id: string; content_type: string; original_text: string | null; image_path: string | null; image_width: number | null; image_height: number | null; audio_frame_count: number | null; audio_sample_rate: number | null; audio_samples_per_frame: number | null; video_index: string | null; created_at: number; expires_at: number; recipient_count: number; revision: number; status: string };
+type ShareRow = { id: string; content_type: string; original_text: string | null; image_path: string | null; image_width: number | null; image_height: number | null; audio_frame_count: number | null; audio_sample_rate: number | null; audio_samples_per_frame: number | null; video_index: string | null; pdf_page_count: number | null; created_at: number; expires_at: number; recipient_count: number; revision: number; status: string };
 type RecipientRow = { join_order: number };
 export type JoinResult = { snapshot: RecipientSnapshot; joined: boolean };
 
@@ -81,6 +82,27 @@ export class ShareService {
     const index = JSON.parse(row.video_index) as GopIndex;
     const { start, length } = partitionRange(index.keyframesMs.length, snapshot.recipientCount, snapshot.recipientNumber);
     return { path: row.image_path, index, start, count: length, snapshot };
+  }
+
+  async createPdf(visitorId: VisitorId, original: StoredPdf): Promise<RecipientSnapshot> {
+    const id = original.path.replace(/\.pdf$/, "");
+    if (!uuidPattern.test(id) || original.path !== `${id}.pdf` || original.pageCount < 1) throw new Error("Invalid stored PDF");
+    const now = this.clock();
+    return this.sql.transaction(async (tx) => {
+      await tx.query("INSERT INTO shares (id, content_type, image_path, pdf_page_count, created_at, expires_at, recipient_count, revision, status) VALUES ($1, 'pdf', $2, $3, $4, $5, 1, 1, 'active')",
+        [id, original.path, original.pageCount, now, now + this.options.shareTtlHours * 3_600_000]);
+      await tx.query("INSERT INTO recipients (share_id, visitor_id, join_order, joined_at) VALUES ($1, $2, 1, $3)", [id, visitorId, now]);
+      return this.snapshotFor(await this.getShare(tx, id), 1);
+    });
+  }
+
+  /** The caller's current page range (0-based start) plus the storage key of the original. */
+  async getPdf(shareId: string, visitorId: VisitorId): Promise<{ path: string; start: number; count: number; snapshot: RecipientSnapshot }> {
+    const snapshot = await this.getSnapshot(shareId, visitorId);
+    const row = await this.getShare(this.sql, shareId);
+    if (row.content_type !== "pdf" || !row.image_path || !row.pdf_page_count) throw new ShareError("INVALID_PDF", 400, "Share has no PDF");
+    const { start, length } = partitionRange(row.pdf_page_count, snapshot.recipientCount, snapshot.recipientNumber);
+    return { path: row.image_path, start, count: length, snapshot };
   }
 
   /** Reserves an upload slot for a direct browser → storage video upload. */
@@ -201,6 +223,18 @@ export class ShareService {
           audioUrl: length ? `/api/shares/${encodeURIComponent(share.id)}/audio?revision=${share.revision}` : null,
           startMs: Math.round(start * frameMs), durationMs: Math.round(length * frameMs), totalDurationMs: Math.round(share.audio_frame_count * frameMs),
           frameCount: length, totalFrames: share.audio_frame_count,
+        },
+      };
+    }
+    if (share.content_type === "pdf" && share.pdf_page_count) {
+      const { start, length } = partitionRange(share.pdf_page_count, share.recipient_count, recipientNumber);
+      return {
+        shareId: share.id, revision: share.revision, status: "active", recipientNumber,
+        recipientCount: share.recipient_count, maxRecipients: this.options.maxRecipients, expiresAt: new Date(share.expires_at).toISOString(),
+        allocation: {
+          kind: "pdf",
+          pdfUrl: length ? `/api/shares/${encodeURIComponent(share.id)}/pdf?revision=${share.revision}` : null,
+          startPage: length ? start + 1 : 0, pageCount: length, totalPages: share.pdf_page_count,
         },
       };
     }

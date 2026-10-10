@@ -1,9 +1,9 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
 import { motion } from "framer-motion";
-import { Film, Image as ImageIcon, Music, Upload, X } from "lucide-react";
-import { acceptedAudioTypes, acceptedImageTypes, acceptedVideoTypes, maxUploadBytes, maxVideoUploadBytes } from "../api";
+import { BookOpen, Film, Image as ImageIcon, Music, Upload, X } from "lucide-react";
+import { acceptedAudioTypes, acceptedImageTypes, acceptedPdfTypes, acceptedVideoTypes, maxUploadBytes, maxVideoUploadBytes } from "../api";
 
-export type MediaKind = "image" | "audio" | "video";
+export type MediaKind = "image" | "audio" | "video" | "pdf";
 
 interface MediaDropzoneProps {
   kind: MediaKind;
@@ -16,6 +16,7 @@ interface MediaDropzoneProps {
 const copy = {
   image: { drop: "ลากภาพมาวาง หรือเลือกไฟล์", hint: "PNG, JPEG, WebP · ไม่เกิน 4 MB · 1 ภาพต่อ share", browse: "Browse Image", reject: "รองรับเฉพาะภาพ PNG, JPEG หรือ WebP", accept: acceptedImageTypes.join(",") },
   audio: { drop: "ลากไฟล์เสียงมาวาง หรือเลือกไฟล์", hint: "MP3 · ไม่เกิน 4 MB (ราว 4 นาที) · 1 ไฟล์ต่อ share", browse: "Browse MP3", reject: "รองรับเฉพาะไฟล์เสียง MP3", accept: ".mp3,audio/mpeg" },
+  pdf: { drop: "ลาก PDF มาวาง หรือเลือกไฟล์", hint: "PDF · ไม่เกิน 4 MB · แบ่งตามหน้า", browse: "Browse PDF", reject: "รองรับเฉพาะไฟล์ PDF", accept: ".pdf,application/pdf" },
   video: { drop: "ลากวิดีโอมาวาง หรือเลือกไฟล์", hint: "MP4 · ไม่เกิน 50 MB · แบ่งตามช่วงเวลา (ตัดที่ keyframe)", browse: "Browse MP4", reject: "รองรับเฉพาะวิดีโอ MP4", accept: ".mp4,video/mp4" },
 };
 
@@ -23,6 +24,7 @@ const formatFileSize = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024
 
 function accepts(kind: MediaKind, file: File): boolean {
   if (kind === "image") return acceptedImageTypes.includes(file.type);
+  if (kind === "pdf") return acceptedPdfTypes.includes(file.type) || (!file.type && /\.pdf$/i.test(file.name));
   if (kind === "video") return acceptedVideoTypes.includes(file.type) || (!file.type && /\.mp4$/i.test(file.name));
   // Some systems leave MP3 types empty; fall back to the extension. The server checks the bytes.
   return acceptedAudioTypes.includes(file.type) || (!file.type.startsWith("image/") && /\.mp3$/i.test(file.name));
@@ -60,7 +62,7 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
     e.target.value = "";
   };
 
-  const Icon = kind === "image" ? ImageIcon : kind === "video" ? Film : Music;
+  const Icon = kind === "image" ? ImageIcon : kind === "video" ? Film : kind === "pdf" ? BookOpen : Music;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col">
@@ -89,7 +91,7 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
       ) : (
         <div className="space-y-3">
           <div className="bg-white border-2 border-gray-300 p-2 flex items-center justify-center">
-            {preview && (kind === "image"
+            {kind === "pdf" ? <BookOpen size={56} className="text-red-500 my-6" aria-hidden="true" /> : preview && (kind === "image"
               ? <img src={preview} alt="ภาพที่เลือก" className="max-h-[220px] max-w-full object-contain" />
               : kind === "video" ? <video src={preview} controls playsInline muted className="max-h-[220px] max-w-full" aria-label="ดูวิดีโอที่เลือก" />
               : <audio src={preview} controls className="w-full" aria-label="ฟังไฟล์ที่เลือก" />)}

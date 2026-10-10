@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { LoaderCircle } from "lucide-react";
 import type { RecipientSnapshot } from "../../shared/contracts";
 import { fetchMedia } from "../api";
+import PdfPages from "./PdfPages";
 
 interface PortionViewProps {
   snapshot: RecipientSnapshot;
@@ -99,7 +100,7 @@ const clock = (ms: number) => {
 };
 
 /** Where a segment sits in the whole track or clip. */
-function Timeline({ startMs, durationMs, totalDurationMs }: { startMs: number; durationMs: number; totalDurationMs: number }) {
+function Timeline({ startMs, durationMs, totalDurationMs, labels }: { startMs: number; durationMs: number; totalDurationMs: number; labels?: [string, string] }) {
   const left = totalDurationMs ? (startMs / totalDurationMs) * 100 : 0;
   const width = totalDurationMs ? (durationMs / totalDurationMs) * 100 : 0;
   return (
@@ -107,12 +108,37 @@ function Timeline({ startMs, durationMs, totalDurationMs }: { startMs: number; d
       <div className="relative h-4 border-2 border-gray-400 bg-gray-200">
         {width > 0 && <div className="absolute inset-y-0 bg-gradient-to-b from-blue-400 to-blue-600" style={{ left: `${left}%`, width: `max(${width}%, 2px)` }} />}
       </div>
-      <div className="flex justify-between text-[11px] text-gray-500 font-mono"><span>0:00</span><span>{clock(totalDurationMs)}</span></div>
+      <div className="flex justify-between text-[11px] text-gray-500 font-mono"><span>{labels?.[0] ?? "0:00"}</span><span>{labels?.[1] ?? clock(totalDurationMs)}</span></div>
     </div>
   );
 }
 
 const seconds = (ms: number) => (ms / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 });
+
+function PdfPortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "pdf" } } }) {
+  const { pdfUrl, startPage, pageCount, totalPages } = snapshot.allocation;
+  const { src, failed } = useMediaUrl(pdfUrl, onStale);
+  const endPage = startPage + pageCount - 1;
+  return (
+    <div className="space-y-3">
+      <div className="bg-gray-100 border-2 border-gray-300 p-2 space-y-3">
+        {pageCount === 0 ? (
+          <p className="text-gray-500 italic text-center py-8 bg-white">คุณได้รับข้อมูล 0 หน้า</p>
+        ) : src ? (
+          <>
+            <PdfPages src={src} firstPage={startPage} />
+            <a href={src} target="_blank" rel="noopener" download={`pages-${startPage}-${endPage}.pdf`} className="xp-button-silver inline-block text-sm">เปิด PDF ของคุณ</a>
+          </>
+        ) : failed ? <p className="text-red-600 text-sm">โหลด PDF ไม่สำเร็จ</p>
+          : <div className="flex justify-center py-8"><LoaderCircle size={32} className="animate-spin text-blue-600" /></div>}
+        <Timeline startMs={Math.max(0, startPage - 1)} durationMs={pageCount} totalDurationMs={totalPages} labels={["หน้า 1", `หน้า ${totalPages}`]} />
+      </div>
+      <p className="text-xs text-gray-600">
+        {pageCount === 0 ? `ได้ 0 จาก ${totalPages} หน้า` : `ได้หน้า ${startPage}${pageCount > 1 ? `–${endPage}` : ""} (${pageCount} หน้า) จาก ${totalPages} หน้า`} ({percent(pageCount, totalPages)}%)
+      </p>
+    </div>
+  );
+}
 
 function VideoPortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "video" } } }) {
   const { videoUrl, startMs, durationMs, totalDurationMs, segmentCount } = snapshot.allocation;
@@ -174,7 +200,9 @@ export default function PortionView({ snapshot, onStale }: PortionViewProps) {
           ? <ImagePortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "image" } }} onStale={onStale} />
           : snapshot.allocation.kind === "audio"
             ? <AudioPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "audio" } }} onStale={onStale} />
-            : <VideoPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "video" } }} onStale={onStale} />}
+            : snapshot.allocation.kind === "video"
+              ? <VideoPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "video" } }} onStale={onStale} />
+              : <PdfPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "pdf" } }} onStale={onStale} />}
     </motion.div>
   );
 }

@@ -1,4 +1,4 @@
-export type ContentType = "text" | "image" | "audio" | "video";
+export type ContentType = "text" | "image" | "audio" | "video" | "pdf";
 export type ShareStatus = "active" | "expired" | "ended";
 
 export type TextAllocation = {
@@ -40,6 +40,16 @@ export type VideoAllocation = {
   totalSegments: number;
 };
 
+/** A contiguous page range of the original PDF, in join order (like the text split). */
+export type PdfAllocation = {
+  kind: "pdf";
+  pdfUrl: string | null;
+  /** 1-based number of the first page this Recipient got (0 when they got none). */
+  startPage: number;
+  pageCount: number;
+  totalPages: number;
+};
+
 export type RecipientSnapshot = {
   shareId: string;
   revision: number;
@@ -48,7 +58,7 @@ export type RecipientSnapshot = {
   recipientCount: number;
   maxRecipients: number;
   expiresAt: string;
-  allocation: TextAllocation | ImageAllocation | AudioAllocation | VideoAllocation;
+  allocation: TextAllocation | ImageAllocation | AudioAllocation | VideoAllocation | PdfAllocation;
 };
 
 export type CreateTextShareRequest = { text: string };
@@ -67,6 +77,7 @@ export type ApiErrorCode =
   | "INVALID_IMAGE"
   | "INVALID_AUDIO"
   | "INVALID_VIDEO"
+  | "INVALID_PDF"
   | "UPLOAD_NOT_FOUND"
   | "UPLOAD_TOO_LARGE"
   | "ORIGIN_NOT_ALLOWED"

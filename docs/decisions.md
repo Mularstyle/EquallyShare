@@ -78,3 +78,11 @@
 - Reason: Vercel rejects request and response bodies above 4.5 MB, so large files must bypass the function both ways; signed URLs also give players range requests. Stream copy keeps cuts fast and lossless; the frame-count limit stops B-frame reordering from leaking the next range's keyframe into a cut.
 - Alternatives: Spatial grid (needs re-encoding every block per join); mp4box.js (new 2.x API, only keyframe times were needed); re-encoding to H.264 (too slow on free CPU).
 - Consequences: Split precision follows keyframe spacing. HEVC uploads are accepted but may not play in every browser. Storage holds the original plus roughly one copy of it in cached cuts per video share; each join makes everyone re-download their new segment, which counts against Supabase's free egress (~5 GB/month), so short clips are best for demos. Vitest timeouts were raised to 30 s because integration tests now run ffmpeg and embedded Postgres in parallel.
+
+## PDF Shares (2026-10-10)
+
+- Context: The user asked for PDF support after MP3 and MP4.
+- Decision: Divide by pages, the natural unit, with the shared `partitionRange` rule. Use the existing 4 MiB multipart upload. The server validates with pdf-lib (including the page tree, since pdf-lib loads leniently) and builds each Recipient's PDF from only their pages with `copyPages`. The browser renders pages with pdf.js 4.10 (legacy build, loaded on demand) using the `print` intent, which renders without requestAnimationFrame.
+- Reason: Pages are what people expect to divide. A per-recipient PDF keeps the "no full original in the page" rule. Many phone browsers (notably Android Chrome) cannot show PDFs inline, so pdf.js canvases are needed; the print intent keeps rendering working in background tabs.
+- Alternatives: Server-side rasterizing to images (needs a native canvas on Vercel); the browser's built-in PDF viewer (not on Android); 50 MB direct upload (more moving parts; PDFs are usually small).
+- Consequences: Encrypted PDFs are rejected. Page shares are only as even as the page count allows. pdf.js adds about 380 KB plus a 1.4 MB worker, loaded only when a PDF share is opened. Unhandled API errors are now logged with their route so Vercel function logs show the cause.

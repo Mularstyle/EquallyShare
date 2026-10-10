@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 
 /**
  * Private storage for originals and derived media. Keys are always server-generated:
- * `<uuid>.png` (image), `<uuid>.mp3` (audio), `<uuid>.mp4` (video), `uploads/<uuid>.mp4` (pending
+ * `<uuid>.png` (image), `<uuid>.mp3` (audio), `<uuid>.mp4` (video), `<uuid>.pdf` (PDF), `uploads/<uuid>.mp4` (pending
  * direct upload) and `segments/<uuid>/<name>.mp4` (cached per-recipient video cuts).
  */
 export interface ImageStore {
@@ -23,7 +23,7 @@ export interface ImageStore {
 }
 
 const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const keyPattern = new RegExp(`^(?:${uuid}\\.(?:png|mp3|mp4)|uploads/${uuid}\\.mp4|segments/${uuid}/[a-z0-9-]{1,40}\\.mp4)$`, "i");
+const keyPattern = new RegExp(`^(?:${uuid}\\.(?:png|mp3|mp4|pdf)|uploads/${uuid}\\.mp4|segments/${uuid}/[a-z0-9-]{1,40}\\.mp4)$`, "i");
 const prefixPattern = new RegExp(`^(?:uploads|segments/${uuid})$`, "i");
 
 export function assertImageKey(key: string): void {
@@ -34,7 +34,7 @@ function assertPrefix(prefix: string): void {
   if (!prefixPattern.test(prefix)) throw new Error("Invalid storage prefix");
 }
 
-const contentType = (key: string) => key.endsWith(".mp3") ? "audio/mpeg" : key.endsWith(".mp4") ? "video/mp4" : "image/png";
+const contentType = (key: string) => key.endsWith(".mp3") ? "audio/mpeg" : key.endsWith(".mp4") ? "video/mp4" : key.endsWith(".pdf") ? "application/pdf" : "image/png";
 
 export class FileImageStore implements ImageStore {
   private readonly directory: string;
