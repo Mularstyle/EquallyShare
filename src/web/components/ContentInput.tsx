@@ -1,9 +1,9 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, Image as ImageIcon, Music } from "lucide-react";
+import { Film, FileText, Image as ImageIcon, Music } from "lucide-react";
 import MediaDropzone from "./MediaDropzone";
 import TextInput from "./TextInput";
 
-export type ContentDraft = { type: "text"; text: string } | { type: "image" | "audio"; file: File | undefined };
+export type ContentDraft = { type: "text"; text: string } | { type: "image" | "audio" | "video"; file: File | undefined };
 
 interface ContentInputProps {
   content: ContentDraft;
@@ -27,7 +27,7 @@ function TabButton({ active, onClick, disabled, children }: { active: boolean; o
   );
 }
 
-/** One original per share: text, a single image, or a single MP3. */
+/** One original per share: text, a single image, a single MP3 or a single MP4. */
 export default function ContentInput({ content, onChange, onReject, disabled }: ContentInputProps) {
   return (
     <div className="space-y-4">
@@ -50,6 +50,10 @@ export default function ContentInput({ content, onChange, onReject, disabled }: 
         <TabButton active={content.type === "audio"} onClick={() => content.type !== "audio" && onChange({ type: "audio", file: undefined })} disabled={disabled}>
           <Music size={16} className="inline mr-2" />
           MP3
+        </TabButton>
+        <TabButton active={content.type === "video"} onClick={() => content.type !== "video" && onChange({ type: "video", file: undefined })} disabled={disabled}>
+          <Film size={16} className="inline mr-2" />
+          MP4
         </TabButton>
       </div>
 

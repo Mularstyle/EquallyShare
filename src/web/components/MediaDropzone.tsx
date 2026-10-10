@@ -1,9 +1,9 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
 import { motion } from "framer-motion";
-import { Image as ImageIcon, Music, Upload, X } from "lucide-react";
-import { acceptedAudioTypes, acceptedImageTypes, maxUploadBytes } from "../api";
+import { Film, Image as ImageIcon, Music, Upload, X } from "lucide-react";
+import { acceptedAudioTypes, acceptedImageTypes, acceptedVideoTypes, maxUploadBytes, maxVideoUploadBytes } from "../api";
 
-export type MediaKind = "image" | "audio";
+export type MediaKind = "image" | "audio" | "video";
 
 interface MediaDropzoneProps {
   kind: MediaKind;
@@ -16,12 +16,14 @@ interface MediaDropzoneProps {
 const copy = {
   image: { drop: "ลากภาพมาวาง หรือเลือกไฟล์", hint: "PNG, JPEG, WebP · ไม่เกิน 4 MB · 1 ภาพต่อ share", browse: "Browse Image", reject: "รองรับเฉพาะภาพ PNG, JPEG หรือ WebP", accept: acceptedImageTypes.join(",") },
   audio: { drop: "ลากไฟล์เสียงมาวาง หรือเลือกไฟล์", hint: "MP3 · ไม่เกิน 4 MB (ราว 4 นาที) · 1 ไฟล์ต่อ share", browse: "Browse MP3", reject: "รองรับเฉพาะไฟล์เสียง MP3", accept: ".mp3,audio/mpeg" },
+  video: { drop: "ลากวิดีโอมาวาง หรือเลือกไฟล์", hint: "MP4 · ไม่เกิน 50 MB · แบ่งตามช่วงเวลา (ตัดที่ keyframe)", browse: "Browse MP4", reject: "รองรับเฉพาะวิดีโอ MP4", accept: ".mp4,video/mp4" },
 };
 
 const formatFileSize = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 function accepts(kind: MediaKind, file: File): boolean {
   if (kind === "image") return acceptedImageTypes.includes(file.type);
+  if (kind === "video") return acceptedVideoTypes.includes(file.type) || (!file.type && /\.mp4$/i.test(file.name));
   // Some systems leave MP3 types empty; fall back to the extension. The server checks the bytes.
   return acceptedAudioTypes.includes(file.type) || (!file.type.startsWith("image/") && /\.mp3$/i.test(file.name));
 }
@@ -42,7 +44,8 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
   const pick = (candidate: File | undefined) => {
     if (!candidate) return;
     if (!accepts(kind, candidate)) { onReject(text.reject); return; }
-    if (candidate.size > maxUploadBytes) { onReject("ไฟล์ใหญ่เกิน 4 MB"); return; }
+    const limit = kind === "video" ? maxVideoUploadBytes : maxUploadBytes;
+    if (candidate.size > limit) { onReject(`ไฟล์ใหญ่เกิน ${limit / 1024 / 1024} MB`); return; }
     onChange(candidate);
   };
 
@@ -57,7 +60,7 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
     e.target.value = "";
   };
 
-  const Icon = kind === "image" ? ImageIcon : Music;
+  const Icon = kind === "image" ? ImageIcon : kind === "video" ? Film : Music;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col">
@@ -88,6 +91,7 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
           <div className="bg-white border-2 border-gray-300 p-2 flex items-center justify-center">
             {preview && (kind === "image"
               ? <img src={preview} alt="ภาพที่เลือก" className="max-h-[220px] max-w-full object-contain" />
+              : kind === "video" ? <video src={preview} controls playsInline muted className="max-h-[220px] max-w-full" aria-label="ดูวิดีโอที่เลือก" />
               : <audio src={preview} controls className="w-full" aria-label="ฟังไฟล์ที่เลือก" />)}
           </div>
           <div className="flex items-center gap-3 p-3 bg-white border-2 border-gray-300">

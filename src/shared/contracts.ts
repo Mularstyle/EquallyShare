@@ -1,4 +1,4 @@
-export type ContentType = "text" | "image" | "audio";
+export type ContentType = "text" | "image" | "audio" | "video";
 export type ShareStatus = "active" | "expired" | "ended";
 
 export type TextAllocation = {
@@ -29,6 +29,17 @@ export type AudioAllocation = {
   totalFrames: number;
 };
 
+/** A contiguous time segment of the original MP4, cut at keyframes (GOPs), in join order. */
+export type VideoAllocation = {
+  kind: "video";
+  videoUrl: string | null;
+  startMs: number;
+  durationMs: number;
+  totalDurationMs: number;
+  segmentCount: number;
+  totalSegments: number;
+};
+
 export type RecipientSnapshot = {
   shareId: string;
   revision: number;
@@ -37,7 +48,7 @@ export type RecipientSnapshot = {
   recipientCount: number;
   maxRecipients: number;
   expiresAt: string;
-  allocation: TextAllocation | ImageAllocation | AudioAllocation;
+  allocation: TextAllocation | ImageAllocation | AudioAllocation | VideoAllocation;
 };
 
 export type CreateTextShareRequest = { text: string };
@@ -55,6 +66,8 @@ export type ApiErrorCode =
   | "TEXT_TOO_LARGE"
   | "INVALID_IMAGE"
   | "INVALID_AUDIO"
+  | "INVALID_VIDEO"
+  | "UPLOAD_NOT_FOUND"
   | "UPLOAD_TOO_LARGE"
   | "ORIGIN_NOT_ALLOWED"
   | "SHARE_NOT_FOUND"
@@ -69,6 +82,10 @@ export type ApiErrorCode =
   | "INTERNAL_ERROR";
 
 export type ApiError = { code: ApiErrorCode; message: string; currentRevision?: number; recipientCount?: number };
+/** Step 1 of a video share: the browser PUTs the MP4 to `uploadUrl`, then calls POST /api/shares/video with `uploadId`. */
+export type VideoUploadTicket = { uploadId: string; uploadUrl: string };
+export type CreateVideoShareRequest = { uploadId: string };
+
 export type EndShareResponse = { shareId: string; status: "ended"; revision: number };
 
 /** Realtime signal on Supabase channel `shareChannel(id)`. It carries no content: pages refetch their own snapshot. */
