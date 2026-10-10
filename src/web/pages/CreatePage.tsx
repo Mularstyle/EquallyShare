@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, Scissors, Users } from "lucide-react";
-import { createImageShare, createTextShare, errorMessage } from "../api";
+import { createAudioShare, createImageShare, createTextShare, errorMessage } from "../api";
 import ContentInput, { type ContentDraft } from "../components/ContentInput";
 import GenerateButton from "../components/GenerateButton";
 import ShatterTransition from "../components/ShatterTransition";
@@ -17,7 +17,7 @@ type State = "idle" | "creating" | "shattering";
 
 function HowItWorks() {
   const rows = [
-    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ข้อมูลถูกแบ่งให้ผู้รับทุกคนคนละส่วน" },
+    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ข้อความ ภาพ หรือเพลง MP3 ถูกแบ่งให้ผู้รับทุกคนคนละส่วน (เพลงแบ่งเป็นช่วงเวลาต่อกัน)" },
     { icon: <Users size={18} />, text: "คุณคือผู้รับ #1 · ทุกคนที่เปิดลิงก์หรือสแกน QR ทำให้ส่วนของทุกคนเล็กลงทันที (สูงสุด 64 คน)" },
     { icon: <Clock size={18} />, text: "แก้ต้นฉบับไม่ได้ · share หมดอายุใน 24 ชั่วโมง หรือเมื่อคุณกด End share" },
   ];
@@ -58,7 +58,7 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
     if (content.type === "text") {
       if (content.text.trim().length === 0) return "พิมพ์ข้อความก่อนแชร์";
       if (countUnits(content.text) > maxTextUnits) return "ข้อความยาวเกินไป";
-    } else if (!content.file) return "เลือกภาพก่อนแชร์";
+    } else if (!content.file) return content.type === "image" ? "เลือกภาพก่อนแชร์" : "เลือกไฟล์ MP3 ก่อนแชร์";
     return undefined;
   };
 
@@ -69,7 +69,9 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
     setError("");
     setState("creating");
     try {
-      const response = content.type === "text" ? await createTextShare(content.text) : await createImageShare(content.file!);
+      const response = content.type === "text" ? await createTextShare(content.text)
+        : content.type === "image" ? await createImageShare(content.file!)
+        : await createAudioShare(content.file!);
       setCreatedId(response.snapshot.shareId);
       setState("shattering");
     } catch (failure) {

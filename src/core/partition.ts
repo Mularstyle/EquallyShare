@@ -1,4 +1,19 @@
 export type TextSlice = { start: number; length: number; text: string };
+export type UnitRange = { start: number; length: number };
+
+/**
+ * The shared division rule: `total` units split into contiguous ranges in join order;
+ * everyone gets floor(total / count) and the first total % count recipients get one more.
+ */
+export function partitionRange(total: number, recipientCount: number, recipientNumber: number): UnitRange {
+  if (!Number.isInteger(total) || total < 0 || !Number.isInteger(recipientCount) || recipientCount <= 0 || !Number.isInteger(recipientNumber) || recipientNumber < 1 || recipientNumber > recipientCount) {
+    throw new RangeError("Invalid partition request");
+  }
+  const base = Math.floor(total / recipientCount);
+  const remainder = total % recipientCount;
+  const index = recipientNumber - 1;
+  return { start: index * base + Math.min(index, remainder), length: base + (index < remainder ? 1 : 0) };
+}
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 

@@ -6,6 +6,7 @@ import { allocateGridCell } from "../core/collage.js";
 import type { ApiError, CreateShareResponse, EndShareResponse, RecipientSnapshot } from "../shared/contracts.js";
 import type { ServerConfig } from "./config.js";
 import { IdentityService, type Clock } from "./identity.js";
+import { AudioService } from "./audio-service.js";
 import { ImageService } from "./image-service.js";
 import { FileImageStore, SupabaseImageStore, type ImageStore } from "./image-store.js";
 import { NoopNotifier, SupabaseBroadcastNotifier, type ShareNotifier } from "./notifier.js";
@@ -34,7 +35,10 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
   const identity = new IdentityService(sql, clock, config.sessionTtlHours);
   const shares = new ShareService(sql, clock, config);
   const images = new ImageService(imageStore, config.maxImagePixels, config.maxImageEdge);
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes, files: 1, fields: 0, parts: 1 } }).single("image");
+  const audio = new AudioService(imageStore);
+  const uploader = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes, files: 1, fields: 0, parts: 1 } });
+  const upload = uploader.single("image");
+  const uploadAudio = uploader.single("audio");
   let activeRenders = 0;
   const allowedOrigin = config.publicOrigin;
 
@@ -99,6 +103,30 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
     } catch (error) { next(error); }
   });
 
+  app.post("/api/shares/audio", async (request, _response, next) => {
+    try { await visitor(request); next(); }
+    catch (error) { next(error); }
+  }, uploadAudio, async (request, response, next) => {
+    try {
+      const visitorId = await visitor(request);
+      const file = request.file;
+      if (!file) throw new ShareError("INVALID_AUDIO", 415, "MP3 file is required");
+      const bytes = file.buffer;
+      // Content must look like MP3 (ID3 tag or frame sync) and match the declared type.
+      const sniffed = bytes.length >= 3 && (bytes.toString("ascii", 0, 3) === "ID3" || (bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0));
+      if (!sniffed || !["audio/mpeg", "audio/mp3"].includes(file.mimetype)) throw new ShareError("INVALID_AUDIO", 415, "Invalid or unsupported MP3");
+      const stored = await audio.normalizeAndStore(bytes, randomUUID());
+      let snapshot: RecipientSnapshot;
+      try { snapshot = await shares.createAudio(visitorId, stored); }
+      catch (error) { await audio.deleteSource(stored.path); throw error; }
+      const shareUrl = `${config.publicOrigin}/s/${encodeURIComponent(snapshot.shareId)}`;
+      let qrDataUrl: string | null = null;
+      try { qrDataUrl = await QRCode.toDataURL(shareUrl); }
+      catch { /* The committed share remains usable. */ }
+      response.status(201).json({ shareUrl, qrDataUrl, qrStatus: qrDataUrl ? "ready" : "unavailable", snapshot } satisfies CreateShareResponse);
+    } catch (error) { next(error); }
+  });
+
   app.post("/api/shares/:shareId/join", async (request, response, next) => {
     try {
       const { snapshot, joined } = await shares.join(String(request.params.shareId), await visitor(request));
@@ -133,7 +161,7 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
       const { shares: removed, imagePaths } = await shares.cleanup();
       let imageErrors = 0;
       for (const path of imagePaths) {
-        try { await images.deleteSource({ path, width: 0, height: 0, totalPixels: 0 }); }
+        try { await (path.endsWith(".mp3") ? audio.deleteSource(path) : images.deleteSource({ path, width: 0, height: 0, totalPixels: 0 })); }
         catch (error) { imageErrors++; console.error("Image cleanup failed", error); }
       }
       response.json({ removedShares: removed, removedImages: imagePaths.length - imageErrors, imageErrors });
@@ -179,10 +207,31 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
     } catch (error) { next(error); }
   });
 
-  const errors: ErrorRequestHandler = (error: unknown, _request, response, _next) => {
+  // This Recipient's current time segment only; the original MP3 never leaves the server.
+  app.get("/api/shares/:shareId/audio", async (request, response, next) => {
+    response.setHeader("Cache-Control", "private, no-store");
+    try {
+      const visitorId = await visitor(request);
+      const shareId = String(request.params.shareId);
+      const revisionText = request.query.revision;
+      if (typeof revisionText !== "string" || !/^[1-9]\d*$/.test(revisionText) || !Number.isSafeInteger(Number(revisionText))) throw new ShareError("STALE_REVISION", 409, "Valid revision required");
+      const revision = Number(revisionText);
+      const segment = await shares.getAudio(shareId, visitorId);
+      if (revision !== segment.snapshot.revision) {
+        response.status(409).json({ code: "STALE_REVISION", message: "Share revision changed", currentRevision: segment.snapshot.revision, recipientCount: segment.snapshot.recipientCount });
+        return;
+      }
+      if (segment.count === 0) { response.status(204).end(); return; }
+      const mp3 = await audio.renderSegment(segment.path, segment.start, segment.count);
+      response.type("audio/mpeg").send(mp3);
+    } catch (error) { next(error); }
+  });
+
+  const errors: ErrorRequestHandler = (error: unknown, request, response, _next) => {
     if (error instanceof multer.MulterError) {
       const tooLarge = error.code === "LIMIT_FILE_SIZE";
-      response.status(tooLarge ? 413 : 415).json({ code: tooLarge ? "UPLOAD_TOO_LARGE" : "INVALID_IMAGE", message: tooLarge ? "Image exceeds upload limit" : "Invalid image upload" } satisfies ApiError);
+      const invalid = request.path.endsWith("/audio") ? "INVALID_AUDIO" : "INVALID_IMAGE";
+      response.status(tooLarge ? 413 : 415).json({ code: tooLarge ? "UPLOAD_TOO_LARGE" : invalid, message: tooLarge ? "File exceeds upload limit" : "Invalid upload" } satisfies ApiError);
       return;
     }
     if (error instanceof ShareError) {

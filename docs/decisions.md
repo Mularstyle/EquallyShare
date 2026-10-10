@@ -62,3 +62,11 @@
 - Reason: Each person sees a recognizable piece of the real picture, and the pieces visibly fit back together on a demo screen.
 - Alternatives: Keeping scattered tiles at their real positions; a regular round-robin tile pattern; a plain N-column strip split.
 - Consequences: Replaces `createTileStream`/`allocateCollage` with `allocateGridCell`; shares are no longer equal to the pixel (cells differ by at most one row/column of pixels, and rows with an extra cell have narrower cells). `fragmentCount` is now 1, or 0 for an empty cell. The confirmed requirement in Project.md is updated.
+
+## MP3 Audio Shares (2026-10-10)
+
+- Context: The user asked for MP3 support. Audio was out of the MVP scope, and Vercel Functions have no ffmpeg.
+- Decision: Accept MP3 only. Parse MPEG audio Layer III frame headers in `src/core/mp3.ts`, drop ID3 tags and the Xing/Info frame, and store only the audio frames. Divide frames like text: contiguous time segments in join order with the shared `partitionRange` rule. Serve each Recipient a standalone MP3 of their frames. Reuse the private store and the `image_path` column for the original's key; add `audio_frame_count`, `audio_sample_rate`, `audio_samples_per_frame`.
+- Reason: Frames are independently decodable units (~26 ms), so cutting at frame boundaries needs no decoder and runs in plain JavaScript on Vercel. Time segments are the natural audio analogue of the confirmed text rule.
+- Alternatives: Decode and re-encode with ffmpeg (heavy, not on Vercel); interleaving short slices (unlistenable); accepting other formats (needs a decoder per format).
+- Consequences: The first frame of a segment can glitch slightly because MP3 frames may borrow bits from earlier ones (bit reservoir). Mixed-sample-rate or free-format MP3s are cut at the first inconsistent frame or rejected. The live database needed an additive migration (applied 2026-10-10).

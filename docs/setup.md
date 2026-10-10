@@ -42,6 +42,7 @@ Never commit real keys; `.env` files are git-ignored and `.env.example` holds na
 
 ## Limits
 
-- Uploads: 4 MiB (Vercel rejects request bodies above 4.5 MB).
+- Uploads: 4 MiB (Vercel rejects request bodies above 4.5 MB). For MP3 that is about 4 minutes at 128 kbps.
+- Audio: MP3 only. Schema changes such as the audio columns are applied with `npm run db:migrate` before deploying code that needs them.
 - Recipients: 64 per share (`MAX_RECIPIENTS`).
 - Shares expire 24 hours after creation.

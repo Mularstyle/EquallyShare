@@ -15,8 +15,9 @@ export const schemaSql = `
   );
   CREATE TABLE IF NOT EXISTS shares (
     id UUID PRIMARY KEY,
-    content_type TEXT NOT NULL CHECK (content_type IN ('text', 'image')),
+    content_type TEXT NOT NULL,
     original_text TEXT,
+    -- Storage key of the original (image PNG or MP3), despite the historical name.
     image_path TEXT,
     image_width INTEGER,
     image_height INTEGER,
@@ -35,6 +36,11 @@ export const schemaSql = `
     UNIQUE (share_id, join_order)
   );
   CREATE INDEX IF NOT EXISTS shares_expires_at_idx ON shares(expires_at);
+  ALTER TABLE shares ADD COLUMN IF NOT EXISTS audio_frame_count INTEGER;
+  ALTER TABLE shares ADD COLUMN IF NOT EXISTS audio_sample_rate INTEGER;
+  ALTER TABLE shares ADD COLUMN IF NOT EXISTS audio_samples_per_frame INTEGER;
+  ALTER TABLE shares DROP CONSTRAINT IF EXISTS shares_content_type_check;
+  ALTER TABLE shares ADD CONSTRAINT shares_content_type_check CHECK (content_type IN ('text', 'image', 'audio'));
   ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
   ALTER TABLE shares ENABLE ROW LEVEL SECURITY;
   ALTER TABLE recipients ENABLE ROW LEVEL SECURITY;

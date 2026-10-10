@@ -1,9 +1,9 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, Image as ImageIcon } from "lucide-react";
-import ImageDropzone from "./ImageDropzone";
+import { FileText, Image as ImageIcon, Music } from "lucide-react";
+import MediaDropzone from "./MediaDropzone";
 import TextInput from "./TextInput";
 
-export type ContentDraft = { type: "text"; text: string } | { type: "image"; file: File | undefined };
+export type ContentDraft = { type: "text"; text: string } | { type: "image" | "audio"; file: File | undefined };
 
 interface ContentInputProps {
   content: ContentDraft;
@@ -19,7 +19,7 @@ function TabButton({ active, onClick, disabled, children }: { active: boolean; o
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
-      className={`flex-1 py-2 px-4 font-semibold transition-all border-2 ${active ? "bg-white border-gray-400 shadow-inner" : "border-t-white border-l-white border-r-gray-600 border-b-gray-600"}`}
+      className={`flex-1 py-2 px-2 sm:px-4 font-semibold transition-all border-2 ${active ? "bg-white border-gray-400 shadow-inner" : "border-t-white border-l-white border-r-gray-600 border-b-gray-600"}`}
       style={active ? {} : { background: "#ECE9D8", boxShadow: "1px 1px 0 rgba(0,0,0,0.1), inset -1px -1px 0 rgba(0,0,0,0.1)" }}
     >
       {children}
@@ -27,7 +27,7 @@ function TabButton({ active, onClick, disabled, children }: { active: boolean; o
   );
 }
 
-/** One original per share: either text or a single image. */
+/** One original per share: text, a single image, or a single MP3. */
 export default function ContentInput({ content, onChange, onReject, disabled }: ContentInputProps) {
   return (
     <div className="space-y-4">
@@ -47,6 +47,10 @@ export default function ContentInput({ content, onChange, onReject, disabled }: 
           <ImageIcon size={16} className="inline mr-2" />
           IMAGE
         </TabButton>
+        <TabButton active={content.type === "audio"} onClick={() => content.type !== "audio" && onChange({ type: "audio", file: undefined })} disabled={disabled}>
+          <Music size={16} className="inline mr-2" />
+          MP3
+        </TabButton>
       </div>
 
       <div className="xp-panel p-4 min-h-[300px]">
@@ -54,7 +58,7 @@ export default function ContentInput({ content, onChange, onReject, disabled }: 
           {content.type === "text" ? (
             <TextInput key="text" value={content.text} onChange={(text) => onChange({ type: "text", text })} disabled={disabled} />
           ) : (
-            <ImageDropzone key="image" file={content.file} onChange={(file) => onChange({ type: "image", file })} onReject={onReject} disabled={disabled} />
+            <MediaDropzone key={content.type} kind={content.type} file={content.file} onChange={(file) => onChange({ type: content.type, file })} onReject={onReject} disabled={disabled} />
           )}
         </AnimatePresence>
       </div>

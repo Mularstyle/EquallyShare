@@ -1,4 +1,4 @@
-export type ContentType = "text" | "image";
+export type ContentType = "text" | "image" | "audio";
 export type ShareStatus = "active" | "expired" | "ended";
 
 export type TextAllocation = {
@@ -18,6 +18,17 @@ export type ImageAllocation = {
   fragmentCount: number;
 };
 
+/** A contiguous time segment of the original MP3, in join order (like the text split). */
+export type AudioAllocation = {
+  kind: "audio";
+  audioUrl: string | null;
+  startMs: number;
+  durationMs: number;
+  totalDurationMs: number;
+  frameCount: number;
+  totalFrames: number;
+};
+
 export type RecipientSnapshot = {
   shareId: string;
   revision: number;
@@ -26,7 +37,7 @@ export type RecipientSnapshot = {
   recipientCount: number;
   maxRecipients: number;
   expiresAt: string;
-  allocation: TextAllocation | ImageAllocation;
+  allocation: TextAllocation | ImageAllocation | AudioAllocation;
 };
 
 export type CreateTextShareRequest = { text: string };
@@ -43,6 +54,7 @@ export type ApiErrorCode =
   | "INVALID_TEXT"
   | "TEXT_TOO_LARGE"
   | "INVALID_IMAGE"
+  | "INVALID_AUDIO"
   | "UPLOAD_TOO_LARGE"
   | "ORIGIN_NOT_ALLOWED"
   | "SHARE_NOT_FOUND"

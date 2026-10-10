@@ -11,6 +11,8 @@
 - [x] End share (creator-only endpoint, `ended` status, realtime signal, UI button) and daily Vercel Cron cleanup of ended/expired shares, images and sessions.
 - [x] Creator/Recipient React UI on the `frontend` branch's XP design: TEXT/IMAGE input, live portion view, URL + QR, End share, Web Locks session bootstrap, Supabase Realtime with polling fallback, loading/ended/expired/not-found/limit/offline states, phone layout. Verified by hand in a browser.
 
+- [x] MP3 audio shares (time segments per recipient), including live database migration.
+
 ## In progress
 
 - ไม่มีงานค้างจาก checkpoint นี้

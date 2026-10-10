@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { partitionText, segmentText } from "../core/partition.js";
+import { partitionRange, partitionText, segmentText } from "../core/partition.js";
+import { frameDurationMs } from "../core/mp3.js";
 import { allocateGridCell } from "../core/collage.js";
 import type { ApiErrorCode, RecipientSnapshot } from "../shared/contracts.js";
 import type { Clock, VisitorId } from "./identity.js";
+import type { StoredAudio } from "./audio-service.js";
 import type { StoredImage } from "./image-service.js";
 import type { Queryable, Sql } from "./sql.js";
 
-type ShareRow = { id: string; content_type: string; original_text: string | null; image_path: string | null; image_width: number | null; image_height: number | null; created_at: number; expires_at: number; recipient_count: number; revision: number; status: string };
+type ShareRow = { id: string; content_type: string; original_text: string | null; image_path: string | null; image_width: number | null; image_height: number | null; audio_frame_count: number | null; audio_sample_rate: number | null; audio_samples_per_frame: number | null; created_at: number; expires_at: number; recipient_count: number; revision: number; status: string };
 type RecipientRow = { join_order: number };
 export type JoinResult = { snapshot: RecipientSnapshot; joined: boolean };
 
@@ -43,6 +45,27 @@ export class ShareService {
       await tx.query("INSERT INTO recipients (share_id, visitor_id, join_order, joined_at) VALUES ($1, $2, 1, $3)", [id, visitorId, now]);
       return this.snapshotFor(await this.getShare(tx, id), 1);
     });
+  }
+
+  async createAudio(visitorId: VisitorId, original: StoredAudio): Promise<RecipientSnapshot> {
+    const id = original.path.replace(/\.mp3$/, "");
+    if (!uuidPattern.test(id) || original.path !== `${id}.mp3` || original.frameCount < 1) throw new Error("Invalid stored audio");
+    const now = this.clock();
+    return this.sql.transaction(async (tx) => {
+      await tx.query("INSERT INTO shares (id, content_type, image_path, audio_frame_count, audio_sample_rate, audio_samples_per_frame, created_at, expires_at, recipient_count, revision, status) VALUES ($1, 'audio', $2, $3, $4, $5, $6, $7, 1, 1, 'active')",
+        [id, original.path, original.frameCount, original.sampleRate, original.samplesPerFrame, now, now + this.options.shareTtlHours * 3_600_000]);
+      await tx.query("INSERT INTO recipients (share_id, visitor_id, join_order, joined_at) VALUES ($1, $2, 1, $3)", [id, visitorId, now]);
+      return this.snapshotFor(await this.getShare(tx, id), 1);
+    });
+  }
+
+  /** The caller's current audio segment (frame range) plus the storage key of the original. */
+  async getAudio(shareId: string, visitorId: VisitorId): Promise<{ path: string; start: number; count: number; snapshot: RecipientSnapshot }> {
+    const snapshot = await this.getSnapshot(shareId, visitorId);
+    const row = await this.getShare(this.sql, shareId);
+    if (row.content_type !== "audio" || !row.image_path || !row.audio_frame_count) throw new ShareError("INVALID_AUDIO", 400, "Share has no audio");
+    const { start, length } = partitionRange(row.audio_frame_count, snapshot.recipientCount, snapshot.recipientNumber);
+    return { path: row.image_path, start, count: length, snapshot };
   }
 
   async getImage(shareId: string, visitorId: VisitorId): Promise<{ image: StoredImage; snapshot: RecipientSnapshot }> {
@@ -122,6 +145,20 @@ export class ShareService {
         shareId: share.id, revision: share.revision, status: "active", recipientNumber,
         recipientCount: share.recipient_count, maxRecipients: this.options.maxRecipients, expiresAt: new Date(share.expires_at).toISOString(),
         allocation: { kind: "image", imageUrl: image.pixelCount ? `/api/shares/${encodeURIComponent(share.id)}/collage?revision=${share.revision}` : null, pixelCount: image.pixelCount, totalPixels: share.image_width * share.image_height, width: image.canvasWidth, height: image.canvasHeight, fragmentCount: image.fragments.length },
+      };
+    }
+    if (share.content_type === "audio" && share.audio_frame_count && share.audio_sample_rate && share.audio_samples_per_frame) {
+      const { start, length } = partitionRange(share.audio_frame_count, share.recipient_count, recipientNumber);
+      const frameMs = frameDurationMs({ sampleRate: share.audio_sample_rate, samplesPerFrame: share.audio_samples_per_frame });
+      return {
+        shareId: share.id, revision: share.revision, status: "active", recipientNumber,
+        recipientCount: share.recipient_count, maxRecipients: this.options.maxRecipients, expiresAt: new Date(share.expires_at).toISOString(),
+        allocation: {
+          kind: "audio",
+          audioUrl: length ? `/api/shares/${encodeURIComponent(share.id)}/audio?revision=${share.revision}` : null,
+          startMs: Math.round(start * frameMs), durationMs: Math.round(length * frameMs), totalDurationMs: Math.round(share.audio_frame_count * frameMs),
+          frameCount: length, totalFrames: share.audio_frame_count,
+        },
       };
     }
     if (share.content_type !== "text" || share.original_text === null) throw new Error("Unsupported share content");

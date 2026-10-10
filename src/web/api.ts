@@ -9,6 +9,7 @@ export class ApiFailure extends Error {
 /** Upload limit enforced by the server (Vercel rejects bodies above 4.5 MB). Checked early for a friendlier message. */
 export const maxUploadBytes = 4 * 1024 * 1024;
 export const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp"];
+export const acceptedAudioTypes = ["audio/mpeg", "audio/mp3"];
 
 let sessionReady: Promise<void> | undefined;
 
@@ -47,6 +48,14 @@ export async function createImageShare(file: File): Promise<CreateShareResponse>
   return request("/api/shares/image", { method: "POST", body: form });
 }
 
+export async function createAudioShare(file: File): Promise<CreateShareResponse> {
+  await ensureSession();
+  const form = new FormData();
+  // Some systems report MP3 files with an empty or generic type; the server sniffs the bytes anyway.
+  form.append("audio", file.type === "audio/mpeg" || file.type === "audio/mp3" ? file : new File([file], file.name, { type: "audio/mpeg" }));
+  return request("/api/shares/audio", { method: "POST", body: form });
+}
+
 export async function joinShare(shareId: string): Promise<RecipientSnapshot> {
   await ensureSession();
   return request(`/api/shares/${encodeURIComponent(shareId)}/join`, { method: "POST" });
@@ -60,12 +69,12 @@ export async function endShare(shareId: string): Promise<EndShareResponse> {
   return request(`/api/shares/${encodeURIComponent(shareId)}/end`, { method: "POST" });
 }
 
-export type CollageResult = { kind: "image"; blob: Blob } | { kind: "stale" } | { kind: "busy" } | { kind: "empty" };
+export type MediaResult = { kind: "media"; blob: Blob } | { kind: "stale" } | { kind: "busy" } | { kind: "empty" };
 
-/** Fetches this Recipient's collage for one revision. The server only ever returns the caller's own fragments. */
-export async function fetchCollage(imageUrl: string, signal: AbortSignal): Promise<CollageResult> {
-  const response = await fetch(imageUrl, { credentials: "same-origin", cache: "no-store", signal });
-  if (response.status === 200) return { kind: "image", blob: await response.blob() };
+/** Fetches this Recipient's image block or audio segment for one revision. The server only ever returns the caller's own part. */
+export async function fetchMedia(url: string, signal: AbortSignal): Promise<MediaResult> {
+  const response = await fetch(url, { credentials: "same-origin", cache: "no-store", signal });
+  if (response.status === 200) return { kind: "media", blob: await response.blob() };
   if (response.status === 204) return { kind: "empty" };
   if (response.status === 409) return { kind: "stale" };
   if (response.status === 503) return { kind: "busy" };
@@ -78,7 +87,8 @@ const messages: Partial<Record<ClientErrorCode, string>> = {
   INVALID_TEXT: "พิมพ์ข้อความก่อนแชร์",
   TEXT_TOO_LARGE: "ข้อความยาวเกินไป",
   INVALID_IMAGE: "รองรับเฉพาะภาพ PNG, JPEG หรือ WebP ที่ไม่ใช่ภาพเคลื่อนไหว",
-  UPLOAD_TOO_LARGE: "ภาพใหญ่เกิน 4 MB",
+  INVALID_AUDIO: "รองรับเฉพาะไฟล์เสียง MP3",
+  UPLOAD_TOO_LARGE: "ไฟล์ใหญ่เกิน 4 MB",
   SHARE_NOT_FOUND: "ไม่พบ share นี้",
   SHARE_EXPIRED: "share นี้หมดอายุแล้ว (เปิดได้ 24 ชั่วโมงหลังสร้าง)",
   SHARE_ENDED: "ผู้สร้างปิด share นี้แล้ว",

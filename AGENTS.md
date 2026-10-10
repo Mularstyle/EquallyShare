@@ -2,7 +2,7 @@
 
 ## Repository Context
 
-This repository contains EquallyShare, the Stupid Hackathon project “Share แปลว่าหาร”. A Creator shares text or an image through a URL and QR code; every Recipient receives a portion that is recomputed when another Recipient joins.
+This repository contains EquallyShare, the Stupid Hackathon project “Share แปลว่าหาร”. A Creator shares text, an image or an MP3 through a URL and QR code; every Recipient receives a portion that is recomputed when another Recipient joins.
 
 This repository is the source of truth for work by Codex, Antigravity, and other coding agents. Do not depend on conversation history, provider-specific memory, or hidden context.
 
@@ -31,6 +31,7 @@ Important project knowledge must be written to the repository so another agent c
 - Recipient count is cumulative. Closing a tab or disconnecting never removes a Recipient or restores a portion.
 - The same browser identity must remain one Recipient across refreshes, reconnects, and multiple tabs.
 - Text allocation uses grapheme clusters, preserves spaces/newlines, and recomputes from the immutable original.
+- Audio is MP3 only. Allocation splits MP3 frames into contiguous time segments in join order with the same floor/remainder rule as text (`partitionRange`), cut at frame boundaries without decoding. A Recipient only ever receives their own segment.
 - Image allocation is a grid: each Recipient gets one solid, unshuffled rectangle of the original, numbered in reading order from the top-left. At N=1 it is the full image; at every N, source pixels are owned exactly once across allocations.
 - Existing Recipient pages update automatically after a new Recipient joins. Animation and sound are outside the MVP.
 - The original cannot be edited after a share is created.

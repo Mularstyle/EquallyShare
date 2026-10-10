@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { LoaderCircle } from "lucide-react";
 import type { RecipientSnapshot } from "../../shared/contracts";
-import { fetchCollage } from "../api";
+import { fetchMedia } from "../api";
 
 interface PortionViewProps {
   snapshot: RecipientSnapshot;
-  /** Called when the server says the collage revision is stale, so the page refetches its snapshot. */
+  /** Called when the server says the media revision is stale, so the page refetches its snapshot. */
   onStale: () => void;
 }
 
@@ -28,14 +28,14 @@ function TextPortion({ snapshot }: { snapshot: RecipientSnapshot & { allocation:
   );
 }
 
-function ImagePortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "image" } } }) {
-  const { imageUrl, pixelCount, totalPixels, width, height } = snapshot.allocation;
+/** Loads this Recipient's media for one revision as an object URL; refetches the snapshot when the revision is stale. */
+function useMediaUrl(url: string | null, onStale: () => void) {
   const [src, setSrc] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!imageUrl) { setSrc(undefined); return; }
+    if (!url) { setSrc(undefined); return; }
     const controller = new AbortController();
     let objectUrl: string | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -43,8 +43,8 @@ function ImagePortion({ snapshot, onStale }: PortionViewProps & { snapshot: Reci
       setLoading(true);
       setFailed(false);
       try {
-        const result = await fetchCollage(imageUrl, controller.signal);
-        if (result.kind === "image") {
+        const result = await fetchMedia(url, controller.signal);
+        if (result.kind === "media") {
           objectUrl = URL.createObjectURL(result.blob);
           setSrc(objectUrl);
           setLoading(false);
@@ -64,10 +64,17 @@ function ImagePortion({ snapshot, onStale }: PortionViewProps & { snapshot: Reci
     return () => {
       controller.abort();
       if (retry) clearTimeout(retry);
-      // Keep the previous picture on screen until the next revision's collage arrives.
+      // Keep the previous media on screen until the next revision's arrives.
       if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl!), 5_000);
     };
-  }, [imageUrl, onStale]);
+  }, [url, onStale]);
+
+  return { src, loading, failed };
+}
+
+function ImagePortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "image" } } }) {
+  const { imageUrl, pixelCount, totalPixels, width, height } = snapshot.allocation;
+  const { src, loading, failed } = useMediaUrl(imageUrl, onStale);
 
   return (
     <div className="space-y-2">
@@ -86,13 +93,53 @@ function ImagePortion({ snapshot, onStale }: PortionViewProps & { snapshot: Reci
   );
 }
 
+const clock = (ms: number) => {
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+};
+
+function AudioPortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "audio" } } }) {
+  const { audioUrl, startMs, durationMs, totalDurationMs, frameCount } = snapshot.allocation;
+  const { src, loading, failed } = useMediaUrl(audioUrl, onStale);
+  const left = totalDurationMs ? (startMs / totalDurationMs) * 100 : 0;
+  const width = totalDurationMs ? (durationMs / totalDurationMs) * 100 : 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-white border-2 border-gray-300 p-4 space-y-3">
+        {frameCount === 0 ? (
+          <p className="text-gray-500 italic text-center py-6">คุณได้รับข้อมูล 0 วินาที</p>
+        ) : (
+          <div className="relative min-h-[54px] flex items-center">
+            {src ? <audio key={src} src={src} controls className={`w-full ${loading ? "opacity-50" : ""}`} aria-label={`ช่วงเพลงของคุณ ${clock(startMs)} ถึง ${clock(startMs + durationMs)}`} />
+              : failed ? <p className="text-red-600 text-sm">โหลดเสียงไม่สำเร็จ</p> : null}
+            {loading && <LoaderCircle size={28} className="absolute left-1/2 -translate-x-1/2 animate-spin text-blue-600" />}
+          </div>
+        )}
+        {/* Where this segment sits in the whole track. */}
+        <div className="space-y-1" aria-hidden="true">
+          <div className="relative h-4 border-2 border-gray-400 bg-gray-200">
+            {width > 0 && <div className="absolute inset-y-0 bg-gradient-to-b from-blue-400 to-blue-600" style={{ left: `${left}%`, width: `max(${width}%, 2px)` }} />}
+          </div>
+          <div className="flex justify-between text-[11px] text-gray-500 font-mono"><span>0:00</span><span>{clock(totalDurationMs)}</span></div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-600">
+        {frameCount === 0 ? `ได้ 0 จาก ${clock(totalDurationMs)}` : `ได้ช่วง ${clock(startMs)}–${clock(startMs + durationMs)} (${(durationMs / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} วินาที) จาก ${clock(totalDurationMs)}`} ({percent(durationMs, totalDurationMs)}%)
+      </p>
+    </div>
+  );
+}
+
 /** Shows only this Recipient's current portion; the server never sends the rest of the original. */
 export default function PortionView({ snapshot, onStale }: PortionViewProps) {
   return (
     <motion.div key={snapshot.revision} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
       {snapshot.allocation.kind === "text"
         ? <TextPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "text" } }} />
-        : <ImagePortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "image" } }} onStale={onStale} />}
+        : snapshot.allocation.kind === "image"
+          ? <ImagePortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "image" } }} onStale={onStale} />
+          : <AudioPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "audio" } }} onStale={onStale} />}
     </motion.div>
   );
 }
