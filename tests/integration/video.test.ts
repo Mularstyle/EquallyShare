@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { parseMp4 } from "../../src/core/mp4.js";
-import type { CreateShareResponse, RecipientSnapshot, VideoAllocation, VideoUploadTicket } from "../../src/shared/contracts.js";
+import type { CreateShareResponse, RecipientSnapshot, VideoAllocation, UploadTicket } from "../../src/shared/contracts.js";
 import { makeMp4 } from "../fixtures/mp4.js";
 import { startTestServer, type TestServer } from "./test-server.js";
 
@@ -31,7 +31,7 @@ async function ticket(server: TestServer, cookie: string, size: number, type = "
   return fetch(`${server.origin}/api/shares/video/uploads`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ size, type }) });
 }
 async function uploadVideo(server: TestServer, cookie: string, bytes: Buffer): Promise<Response> {
-  const slot = await (await ticket(server, cookie, bytes.length)).json() as VideoUploadTicket;
+  const slot = await (await ticket(server, cookie, bytes.length)).json() as UploadTicket;
   const put = await fetch(`${server.origin}${slot.uploadUrl}`, { method: "PUT", headers: { cookie, "content-type": "video/mp4" }, body: new Uint8Array(bytes) });
   expect(put.status).toBe(204);
   return fetch(`${server.origin}/api/shares/video`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ uploadId: slot.uploadId }) });
@@ -93,7 +93,7 @@ it("guards membership, revision and upload ownership", async () => {
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ code: "STALE_REVISION", currentRevision: 2 });
 
-  const slot = await (await ticket(current, creator, clip.length)).json() as VideoUploadTicket;
+  const slot = await (await ticket(current, creator, clip.length)).json() as UploadTicket;
   const thief = await fetch(`${current.origin}${slot.uploadUrl}`, { method: "PUT", headers: { cookie: stranger }, body: new Uint8Array(clip) });
   expect(thief.status).toBe(404);
   const claim = await fetch(`${current.origin}/api/shares/video`, { method: "POST", headers: { cookie: stranger, "content-type": "application/json" }, body: JSON.stringify({ uploadId: slot.uploadId }) });

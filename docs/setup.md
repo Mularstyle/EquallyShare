@@ -43,8 +43,8 @@ Never commit real keys; `.env` files are git-ignored and `.env.example` holds na
 ## Limits
 
 - Uploads: 4 MiB (Vercel rejects request bodies above 4.5 MB). For MP3 that is about 4 minutes at 128 kbps.
-- PDF: up to 4 MiB, not password-protected.
-- Video: MP4 only, up to 50 MB (`MAX_VIDEO_UPLOAD_BYTES`). The browser uploads it straight to the private bucket with a signed upload URL, so the Supabase bucket's file size limit must allow 50 MB (the free-plan default). `vercel.json` ships the `ffmpeg-static` binary with the function for cutting.
+- PDF: up to 50 MB, not password-protected; uploaded directly to storage like video.
+- Video: MP4 only, up to 50 MB (`MAX_DIRECT_UPLOAD_BYTES`, shared with PDF; the older `MAX_VIDEO_UPLOAD_BYTES` still works). The browser uploads it straight to the private bucket with a signed upload URL, so the Supabase bucket's file size limit must allow 50 MB (the free-plan default). `vercel.json` ships the `ffmpeg-static` binary with the function for cutting.
 - Audio: MP3 only. Schema changes such as the audio columns are applied with `npm run db:migrate` before deploying code that needs them.
 - Recipients: 64 per share (`MAX_RECIPIENTS`).
 - Shares expire 24 hours after creation.

@@ -32,7 +32,7 @@ Important project knowledge must be written to the repository so another agent c
 - The same browser identity must remain one Recipient across refreshes, reconnects, and multiple tabs.
 - Text allocation uses grapheme clusters, preserves spaces/newlines, and recomputes from the immutable original.
 - Audio is MP3 only. Allocation splits MP3 frames into contiguous time segments in join order with the same floor/remainder rule as text (`partitionRange`), cut at frame boundaries without decoding. A Recipient only ever receives their own segment.
-- PDF allocation splits pages into contiguous ranges with `partitionRange`; each Recipient receives a new PDF containing only their pages (pdf-lib `copyPages`). Encrypted PDFs are rejected.
+- PDF allocation splits pages into contiguous ranges with `partitionRange`; each Recipient receives a new PDF containing only their pages (pdf-lib `copyPages`), cached in storage per range and served via a signed URL. PDFs (up to 50 MB) use the same direct-to-storage upload as video. Encrypted PDFs are rejected.
 - Video is MP4 only (up to 50 MB, uploaded directly to storage). Allocation splits keyframe-to-keyframe GOPs into contiguous time segments with `partitionRange`; segments are cut with ffmpeg stream copy and a frame-count limit, cached in storage per GOP range, and served via short-lived signed URLs.
 - Image allocation is a grid: each Recipient gets one solid, unshuffled rectangle of the original, numbered in reading order from the top-left. At N=1 it is the full image; at every N, source pixels are owned exactly once across allocations.
 - Existing Recipient pages update automatically after a new Recipient joins. Animation and sound are outside the MVP.

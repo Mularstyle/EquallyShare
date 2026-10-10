@@ -93,9 +93,12 @@ export type ApiErrorCode =
   | "INTERNAL_ERROR";
 
 export type ApiError = { code: ApiErrorCode; message: string; currentRevision?: number; recipientCount?: number };
-/** Step 1 of a video share: the browser PUTs the MP4 to `uploadUrl`, then calls POST /api/shares/video with `uploadId`. */
-export type VideoUploadTicket = { uploadId: string; uploadUrl: string };
-export type CreateVideoShareRequest = { uploadId: string };
+/**
+ * Step 1 of a video or PDF share (files up to 50 MB): POST /api/shares/{video|pdf}/uploads with `{ size, type }`,
+ * PUT the file to `uploadUrl`, then POST /api/shares/{video|pdf} with `{ uploadId }`.
+ */
+export type UploadTicket = { uploadId: string; uploadUrl: string };
+export type CreateFromUploadRequest = { uploadId: string };
 
 export type EndShareResponse = { shareId: string; status: "ended"; revision: number };
 

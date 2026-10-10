@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { afterEach, expect, it } from "vitest";
-import type { CreateShareResponse, PdfAllocation, RecipientSnapshot } from "../../src/shared/contracts.js";
+import type { CreateShareResponse, PdfAllocation, RecipientSnapshot, UploadTicket } from "../../src/shared/contracts.js";
 import { startTestServer, type TestServer } from "./test-server.js";
 
 const servers: TestServer[] = [];
@@ -32,10 +32,14 @@ const pageNumbers = async (bytes: ArrayBuffer) => (await PDFDocument.load(bytes)
 async function session(server: TestServer): Promise<string> {
   return (await fetch(`${server.origin}/api/session`, { method: "POST" })).headers.get("set-cookie")!.split(";")[0]!;
 }
+/** Direct upload as the browser does it: reserve, PUT the bytes, then create. */
 async function upload(server: TestServer, cookie: string, bytes: Buffer, mime = "application/pdf") {
-  const form = new FormData();
-  form.append("pdf", new Blob([new Uint8Array(bytes)], { type: mime }), "doc.pdf");
-  return fetch(`${server.origin}/api/shares/pdf`, { method: "POST", headers: { cookie }, body: form });
+  const reserve = await fetch(`${server.origin}/api/shares/pdf/uploads`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ size: bytes.length, type: mime }) });
+  if (reserve.status !== 201) return reserve;
+  const slot = await reserve.json() as UploadTicket;
+  const put = await fetch(`${server.origin}${slot.uploadUrl}`, { method: "PUT", headers: { cookie, "content-type": mime }, body: new Uint8Array(bytes) });
+  if (put.status !== 204) return put;
+  return fetch(`${server.origin}/api/shares/pdf`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ uploadId: slot.uploadId }) });
 }
 const allocation = (snapshot: RecipientSnapshot) => snapshot.allocation as PdfAllocation;
 
@@ -85,7 +89,7 @@ it("refuses encrypted PDFs at the library level", async () => {
 
 it("rejects non-PDF, encrypted, mislabelled and oversized files without storing anything", async () => {
   const directory = mkdtempSync(join(tmpdir(), "equallyshare-pdf-")); directories.push(directory);
-  const server = await startTestServer({ dataDir: directory, maxUploadBytes: 20_000 }); servers.push(server);
+  const server = await startTestServer({ dataDir: directory, maxDirectUploadBytes: 20_000 }); servers.push(server);
   const cookie = await session(server);
   const big = await makePdf(200);
   expect(big.length).toBeGreaterThan(20_000);
@@ -102,7 +106,37 @@ it("rejects non-PDF, encrypted, mislabelled and oversized files without storing 
     expect(await response.json()).toMatchObject({ code });
   }
   expect(await server.sql.query("SELECT id FROM shares")).toEqual([]);
-  expect(existsSync(join(directory, "originals")) ? readdirSync(join(directory, "originals")) : []).toEqual([]);
+  const leftovers = existsSync(join(directory, "originals")) ? readdirSync(join(directory, "originals"), { recursive: true }).filter((name) => String(name).includes(".")) : [];
+  expect(leftovers).toEqual([]);
+});
+
+it("serves page ranges from the storage cache and keeps only ranges for the current count", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "equallyshare-pdf-")); directories.push(directory);
+  const server = await startTestServer({ dataDir: directory }); servers.push(server);
+  const creator = await session(server);
+  const created = await (await upload(server, creator, await makePdf(6))).json() as CreateShareResponse;
+  const id = created.snapshot.shareId;
+  expect((await fetch(`${server.origin}${allocation(created.snapshot).pdfUrl}`, { headers: { cookie: creator } })).status).toBe(200);
+  expect(readdirSync(join(directory, "originals", "segments", id))).toEqual(["p0-6.pdf"]);
+  const visitor = await session(server);
+  const joined = await (await fetch(`${server.origin}/api/shares/${id}/join`, { method: "POST", headers: { cookie: visitor } })).json() as RecipientSnapshot;
+  expect(await pageNumbers(await (await fetch(`${server.origin}${allocation(joined).pdfUrl}`, { headers: { cookie: visitor } })).arrayBuffer())).toEqual([4, 5, 6]);
+  expect(readdirSync(join(directory, "originals", "segments", id))).toEqual(["p3-3.pdf"]);
+});
+
+it("accepts PDFs above the old 4 MB multipart limit through the direct upload", async () => {
+  const server = await startTestServer(); servers.push(server);
+  const creator = await session(server);
+  const document = await PDFDocument.create();
+  // Incompressible filler stream so the file is genuinely large.
+  const filler = document.context.flateStream(Buffer.from(Array.from({ length: 6 * 1024 * 1024 }, () => Math.floor(Math.random() * 256))));
+  document.context.register(filler);
+  for (let n = 1; n <= 3; n++) document.addPage([300 + n, 400]);
+  const bytes = Buffer.from(await document.save());
+  expect(bytes.length).toBeGreaterThan(5 * 1024 * 1024);
+  const response = await upload(server, creator, bytes);
+  expect(response.status).toBe(201);
+  expect(allocation((await response.json() as CreateShareResponse).snapshot)).toMatchObject({ pageCount: 3, totalPages: 3 });
 });
 
 it("removes stored PDF originals during cleanup", async () => {
@@ -110,9 +144,11 @@ it("removes stored PDF originals during cleanup", async () => {
   const server = await startTestServer({ dataDir: directory, cronSecret: "secret" }); servers.push(server);
   const creator = await session(server);
   const created = await (await upload(server, creator, await makePdf(3))).json() as CreateShareResponse;
-  expect(readdirSync(join(directory, "originals"))).toEqual([`${created.snapshot.shareId}.pdf`]);
+  expect(readdirSync(join(directory, "originals")).filter((name) => name.endsWith(".pdf"))).toEqual([`${created.snapshot.shareId}.pdf`]);
   await fetch(`${server.origin}/api/shares/${created.snapshot.shareId}/end`, { method: "POST", headers: { cookie: creator } });
+  await fetch(`${server.origin}${allocation(created.snapshot).pdfUrl}`, { headers: { cookie: creator } });
   const cleanup = await fetch(`${server.origin}/api/cron/cleanup`, { headers: { authorization: "Bearer secret" } });
   expect(await cleanup.json()).toEqual({ removedShares: 1, removedImages: 1, imageErrors: 0 });
-  expect(readdirSync(join(directory, "originals"))).toEqual([]);
+  expect(readdirSync(join(directory, "originals")).filter((name) => name.endsWith(".pdf"))).toEqual([]);
+  expect(existsSync(join(directory, "originals", "segments", created.snapshot.shareId))).toBe(false);
 });

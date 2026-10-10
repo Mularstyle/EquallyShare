@@ -74,7 +74,7 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
       const response = content.type === "text" ? await createTextShare(content.text)
         : content.type === "image" ? await createImageShare(content.file!)
         : content.type === "audio" ? await createAudioShare(content.file!)
-        : content.type === "pdf" ? await createPdfShare(content.file!)
+        : content.type === "pdf" ? await createPdfShare(content.file!, setProgress)
         : await createVideoShare(content.file!, setProgress);
       setCreatedId(response.snapshot.shareId);
       setState("shattering");
@@ -118,7 +118,7 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
 
             <div className="border-t-2 border-gray-400 px-4 py-2 text-sm text-gray-700 flex items-center gap-2" style={{ background: "#ECE9D8" }}>
               <div className={`w-2 h-2 rounded-full ${state === "idle" ? (error ? "bg-red-500" : "bg-green-500") : "bg-yellow-500 animate-pulse"}`} />
-              <span>{state === "idle" ? (error ? "Error Occurred" : "System Ready") : state === "creating" ? (progress === undefined ? "Uploading..." : progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : "Indexing keyframes...") : "Dividing..."}</span>
+              <span>{state === "idle" ? (error ? "Error Occurred" : "System Ready") : state === "creating" ? (progress === undefined ? "Uploading..." : progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : content.type === "pdf" ? "Reading pages..." : "Indexing keyframes...") : "Dividing..."}</span>
               <div className="flex-1" />
               <span className="text-xs opacity-60">EquallyShare v1.0</span>
             </div>

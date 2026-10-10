@@ -12,12 +12,12 @@ export class PdfService {
 
   constructor(private readonly store: ImageStore) {}
 
-  async normalizeAndStore(input: Buffer, shareId: string): Promise<StoredPdf> {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shareId)) throw new Error("Invalid share ID");
+  /** Validates an uploaded PDF and keeps the parsed document for the first renders. */
+  async inspect(input: Uint8Array, path: string): Promise<StoredPdf> {
     let document: PDFDocument;
     let pageCount: number;
     try {
-      if (input.toString("latin1", 0, 5) !== "%PDF-") throw new Error("Missing PDF header");
+      if (String.fromCharCode(...input.subarray(0, 5)) !== "%PDF-") throw new Error("Missing PDF header");
       // Encrypted PDFs are rejected: pages cannot be copied out of them reliably.
       document = await PDFDocument.load(input, { updateMetadata: false });
       // pdf-lib loads leniently; a missing or broken page tree only shows up here.
@@ -26,10 +26,8 @@ export class PdfService {
       throw new ShareError("INVALID_PDF", 415, "Invalid, encrypted or unsupported PDF");
     }
     if (pageCount < 1) throw new ShareError("INVALID_PDF", 415, "PDF has no pages");
-    const stored: StoredPdf = { path: `${shareId}.pdf`, pageCount };
-    await this.store.put(stored.path, input);
-    this.remember(stored.path, document);
-    return stored;
+    this.remember(path, document);
+    return { path, pageCount };
   }
 
   /** A new PDF with pages [start, start + count) of the original (0-based), and nothing else from it. */
@@ -43,9 +41,11 @@ export class PdfService {
   }
 
   async deleteSource(path: string): Promise<void> {
-    this.loaded.delete(path);
+    this.forget(path);
     await this.store.delete(path);
   }
+
+  forget(path: string): void { this.loaded.delete(path); }
 
   private async load(path: string): Promise<PDFDocument> {
     const cached = this.loaded.get(path);

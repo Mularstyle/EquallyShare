@@ -13,6 +13,8 @@ import type { Queryable, Sql } from "./sql.js";
 type ShareRow = { id: string; content_type: string; original_text: string | null; image_path: string | null; image_width: number | null; image_height: number | null; audio_frame_count: number | null; audio_sample_rate: number | null; audio_samples_per_frame: number | null; video_index: string | null; pdf_page_count: number | null; created_at: number; expires_at: number; recipient_count: number; revision: number; status: string };
 type RecipientRow = { join_order: number };
 export type JoinResult = { snapshot: RecipientSnapshot; joined: boolean };
+/** Files too large for a Vercel request body, uploaded by the browser straight to storage. */
+export type DirectUploadKind = "video" | "pdf";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -97,26 +99,26 @@ export class ShareService {
   }
 
   /** The caller's current page range (0-based start) plus the storage key of the original. */
-  async getPdf(shareId: string, visitorId: VisitorId): Promise<{ path: string; start: number; count: number; snapshot: RecipientSnapshot }> {
+  async getPdf(shareId: string, visitorId: VisitorId): Promise<{ path: string; start: number; count: number; totalPages: number; snapshot: RecipientSnapshot }> {
     const snapshot = await this.getSnapshot(shareId, visitorId);
     const row = await this.getShare(this.sql, shareId);
     if (row.content_type !== "pdf" || !row.image_path || !row.pdf_page_count) throw new ShareError("INVALID_PDF", 400, "Share has no PDF");
     const { start, length } = partitionRange(row.pdf_page_count, snapshot.recipientCount, snapshot.recipientNumber);
-    return { path: row.image_path, start, count: length, snapshot };
+    return { path: row.image_path, start, count: length, totalPages: row.pdf_page_count, snapshot };
   }
 
   /** Reserves an upload slot for a direct browser → storage video upload. */
-  async createPendingUpload(visitorId: VisitorId): Promise<string> {
+  async createPendingUpload(visitorId: VisitorId, kind: DirectUploadKind): Promise<string> {
     const id = randomUUID();
-    await this.sql.query("INSERT INTO pending_uploads (id, visitor_id, created_at) VALUES ($1, $2, $3)", [id, visitorId, this.clock()]);
+    await this.sql.query("INSERT INTO pending_uploads (id, visitor_id, created_at, media_kind) VALUES ($1, $2, $3, $4)", [id, visitorId, this.clock(), kind]);
     return id;
   }
 
-  /** True when the upload slot exists, belongs to this visitor and is less than an hour old. */
-  async ownsPendingUpload(uploadId: string, visitorId: VisitorId): Promise<boolean> {
-    if (!uuidPattern.test(uploadId)) return false;
-    const [row] = await this.sql.query("SELECT 1 FROM pending_uploads WHERE id = $1 AND visitor_id = $2 AND created_at > $3", [uploadId, visitorId, this.clock() - 3_600_000]);
-    return Boolean(row);
+  /** The upload's kind when the slot exists, belongs to this visitor and is less than an hour old. */
+  async pendingUploadKind(uploadId: string, visitorId: VisitorId): Promise<DirectUploadKind | undefined> {
+    if (!uuidPattern.test(uploadId)) return undefined;
+    const [row] = await this.sql.query<{ media_kind: DirectUploadKind }>("SELECT media_kind FROM pending_uploads WHERE id = $1 AND visitor_id = $2 AND created_at > $3", [uploadId, visitorId, this.clock() - 3_600_000]);
+    return row?.media_kind;
   }
 
   async deletePendingUpload(uploadId: string): Promise<void> {

@@ -17,8 +17,8 @@ export type ServerConfig = {
   maxTextGraphemes: number;
   maxRecipients: number;
   maxUploadBytes: number;
-  /** Video goes browser → storage directly, so it is not bound by Vercel's 4.5 MB request limit. */
-  maxVideoUploadBytes: number;
+  /** Video and PDF go browser → storage directly, so they are not bound by Vercel's 4.5 MB request limit. */
+  maxDirectUploadBytes: number;
   maxImagePixels: number;
   maxImageEdge: number;
   maxConcurrentRenders: number;
@@ -61,7 +61,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     maxRecipients: integer("MAX_RECIPIENTS", 64, 1),
     // Vercel Functions reject request bodies above 4.5 MB.
     maxUploadBytes: integer("MAX_UPLOAD_BYTES", 4_194_304, 1),
-    maxVideoUploadBytes: integer("MAX_VIDEO_UPLOAD_BYTES", 52_428_800, 1),
+    // MAX_VIDEO_UPLOAD_BYTES is the older name of this setting and still honoured.
+    maxDirectUploadBytes: integer(env.MAX_DIRECT_UPLOAD_BYTES !== undefined ? "MAX_DIRECT_UPLOAD_BYTES" : "MAX_VIDEO_UPLOAD_BYTES", 52_428_800, 1),
     maxImagePixels: integer("MAX_IMAGE_PIXELS", 12_000_000, 1),
     maxImageEdge: integer("MAX_IMAGE_EDGE", 1024, 1),
     maxConcurrentRenders: integer("MAX_CONCURRENT_RENDERS", 4, 1),

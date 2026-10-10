@@ -86,3 +86,10 @@
 - Reason: Pages are what people expect to divide. A per-recipient PDF keeps the "no full original in the page" rule. Many phone browsers (notably Android Chrome) cannot show PDFs inline, so pdf.js canvases are needed; the print intent keeps rendering working in background tabs.
 - Alternatives: Server-side rasterizing to images (needs a native canvas on Vercel); the browser's built-in PDF viewer (not on Android); 50 MB direct upload (more moving parts; PDFs are usually small).
 - Consequences: Encrypted PDFs are rejected. Page shares are only as even as the page count allows. pdf.js adds about 380 KB plus a 1.4 MB worker, loaded only when a PDF share is opened. Unhandled API errors are now logged with their route so Vercel function logs show the cause.
+
+## PDF Limit Raised to 50 MB (2026-10-10)
+
+- Context: The user asked for 50 MB PDFs. Vercel rejects request and response bodies above 4.5 MB, so the 4 MiB multipart path cannot carry them.
+- Decision: PDFs use the video direct-upload flow (`POST /api/shares/pdf/uploads` → PUT to a signed Supabase URL → `POST /api/shares/pdf { uploadId }`). `pending_uploads.media_kind` records what each upload slot is for. Per-recipient PDFs are cached in storage per page range (`segments/<share>/p<start>-<count>.pdf`), stale ranges are dropped, and recipients get a 10-minute signed URL. One `MAX_DIRECT_UPLOAD_BYTES` limit covers video and PDF. pdf.js draws the first 3 pages immediately and the rest as they scroll into view.
+- Reason: Same constraints and solution as video; lazy page drawing keeps a long PDF from exhausting phone memory.
+- Consequences: The multipart `POST /api/shares/pdf` form upload is gone. Building a range from a 50 MB PDF loads it into function memory (well within Vercel's limit) and the first view of a range takes a moment while it is built.

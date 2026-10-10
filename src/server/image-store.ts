@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 
 /**
  * Private storage for originals and derived media. Keys are always server-generated:
- * `<uuid>.png` (image), `<uuid>.mp3` (audio), `<uuid>.mp4` (video), `<uuid>.pdf` (PDF), `uploads/<uuid>.mp4` (pending
- * direct upload) and `segments/<uuid>/<name>.mp4` (cached per-recipient video cuts).
+ * `<uuid>.png` (image), `<uuid>.mp3` (audio), `<uuid>.mp4` (video), `<uuid>.pdf` (PDF), `uploads/<uuid>.mp4|pdf` (pending
+ * direct upload) and `segments/<uuid>/<name>.mp4|pdf` (cached per-recipient video cuts and PDF page ranges).
  */
 export interface ImageStore {
   put(key: string, data: Buffer): Promise<void>;
@@ -23,7 +23,7 @@ export interface ImageStore {
 }
 
 const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const keyPattern = new RegExp(`^(?:${uuid}\\.(?:png|mp3|mp4|pdf)|uploads/${uuid}\\.mp4|segments/${uuid}/[a-z0-9-]{1,40}\\.mp4)$`, "i");
+const keyPattern = new RegExp(`^(?:${uuid}\\.(?:png|mp3|mp4|pdf)|uploads/${uuid}\\.(?:mp4|pdf)|segments/${uuid}/[a-z0-9-]{1,40}\\.(?:mp4|pdf))$`, "i");
 const prefixPattern = new RegExp(`^(?:uploads|segments/${uuid})$`, "i");
 
 export function assertImageKey(key: string): void {

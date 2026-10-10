@@ -48,6 +48,7 @@ export const schemaSql = `
     visitor_id UUID NOT NULL,
     created_at BIGINT NOT NULL
   );
+  ALTER TABLE pending_uploads ADD COLUMN IF NOT EXISTS media_kind TEXT NOT NULL DEFAULT 'video';
   ALTER TABLE pending_uploads ENABLE ROW LEVEL SECURITY;
   ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
   ALTER TABLE shares ENABLE ROW LEVEL SECURITY;

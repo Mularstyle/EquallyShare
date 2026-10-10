@@ -1,7 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, Film, Image as ImageIcon, Music, Upload, X } from "lucide-react";
-import { acceptedAudioTypes, acceptedImageTypes, acceptedPdfTypes, acceptedVideoTypes, maxUploadBytes, maxVideoUploadBytes } from "../api";
+import { acceptedAudioTypes, acceptedImageTypes, acceptedPdfTypes, acceptedVideoTypes, maxDirectUploadBytes, maxUploadBytes } from "../api";
 
 export type MediaKind = "image" | "audio" | "video" | "pdf";
 
@@ -16,7 +16,7 @@ interface MediaDropzoneProps {
 const copy = {
   image: { drop: "ลากภาพมาวาง หรือเลือกไฟล์", hint: "PNG, JPEG, WebP · ไม่เกิน 4 MB · 1 ภาพต่อ share", browse: "Browse Image", reject: "รองรับเฉพาะภาพ PNG, JPEG หรือ WebP", accept: acceptedImageTypes.join(",") },
   audio: { drop: "ลากไฟล์เสียงมาวาง หรือเลือกไฟล์", hint: "MP3 · ไม่เกิน 4 MB (ราว 4 นาที) · 1 ไฟล์ต่อ share", browse: "Browse MP3", reject: "รองรับเฉพาะไฟล์เสียง MP3", accept: ".mp3,audio/mpeg" },
-  pdf: { drop: "ลาก PDF มาวาง หรือเลือกไฟล์", hint: "PDF · ไม่เกิน 4 MB · แบ่งตามหน้า", browse: "Browse PDF", reject: "รองรับเฉพาะไฟล์ PDF", accept: ".pdf,application/pdf" },
+  pdf: { drop: "ลาก PDF มาวาง หรือเลือกไฟล์", hint: "PDF · ไม่เกิน 50 MB · แบ่งตามหน้า", browse: "Browse PDF", reject: "รองรับเฉพาะไฟล์ PDF", accept: ".pdf,application/pdf" },
   video: { drop: "ลากวิดีโอมาวาง หรือเลือกไฟล์", hint: "MP4 · ไม่เกิน 50 MB · แบ่งตามช่วงเวลา (ตัดที่ keyframe)", browse: "Browse MP4", reject: "รองรับเฉพาะวิดีโอ MP4", accept: ".mp4,video/mp4" },
 };
 
@@ -46,7 +46,7 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
   const pick = (candidate: File | undefined) => {
     if (!candidate) return;
     if (!accepts(kind, candidate)) { onReject(text.reject); return; }
-    const limit = kind === "video" ? maxVideoUploadBytes : maxUploadBytes;
+    const limit = kind === "video" || kind === "pdf" ? maxDirectUploadBytes : maxUploadBytes;
     if (candidate.size > limit) { onReject(`ไฟล์ใหญ่เกิน ${limit / 1024 / 1024} MB`); return; }
     onChange(candidate);
   };

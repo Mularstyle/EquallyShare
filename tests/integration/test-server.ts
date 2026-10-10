@@ -18,10 +18,10 @@ export type TestServer = {
   close(): Promise<void>;
 };
 
-export async function startTestServer(options: { clock?: Clock; dataDir?: string; publicOrigin?: string; maxRecipients?: number; maxUploadBytes?: number; maxImagePixels?: number; maxConcurrentRenders?: number; notifier?: ShareNotifier; cronSecret?: string } = {}): Promise<TestServer> {
+export async function startTestServer(options: { clock?: Clock; dataDir?: string; publicOrigin?: string; maxRecipients?: number; maxUploadBytes?: number; maxImagePixels?: number; maxConcurrentRenders?: number; notifier?: ShareNotifier; cronSecret?: string; maxDirectUploadBytes?: number } = {}): Promise<TestServer> {
   const owned = !options.dataDir;
   const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "equallyshare-"));
-  const config = loadConfig({ DATA_DIR: dataDir, PUBLIC_ORIGIN: options.publicOrigin ?? "http://localhost:3000", ...(options.maxRecipients ? { MAX_RECIPIENTS: String(options.maxRecipients) } : {}), ...(options.maxUploadBytes ? { MAX_UPLOAD_BYTES: String(options.maxUploadBytes) } : {}), ...(options.maxImagePixels ? { MAX_IMAGE_PIXELS: String(options.maxImagePixels) } : {}), ...(options.maxConcurrentRenders ? { MAX_CONCURRENT_RENDERS: String(options.maxConcurrentRenders) } : {}), ...(options.cronSecret ? { CRON_SECRET: options.cronSecret } : {}) });
+  const config = loadConfig({ DATA_DIR: dataDir, PUBLIC_ORIGIN: options.publicOrigin ?? "http://localhost:3000", ...(options.maxRecipients ? { MAX_RECIPIENTS: String(options.maxRecipients) } : {}), ...(options.maxUploadBytes ? { MAX_UPLOAD_BYTES: String(options.maxUploadBytes) } : {}), ...(options.maxImagePixels ? { MAX_IMAGE_PIXELS: String(options.maxImagePixels) } : {}), ...(options.maxConcurrentRenders ? { MAX_CONCURRENT_RENDERS: String(options.maxConcurrentRenders) } : {}), ...(options.cronSecret ? { CRON_SECRET: options.cronSecret } : {}), ...(options.maxDirectUploadBytes ? { MAX_DIRECT_UPLOAD_BYTES: String(options.maxDirectUploadBytes) } : {}) });
   // A caller-supplied dataDir gets an on-disk database so reopen/persistence can be tested.
   const sql = await openDatabase(config, { inMemory: owned });
   const events: TestServer["events"] = [];

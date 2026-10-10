@@ -1,4 +1,4 @@
-import type { ApiError, ApiErrorCode, CreateShareResponse, EndShareResponse, RecipientSnapshot, VideoUploadTicket } from "../shared/contracts";
+import type { ApiError, ApiErrorCode, CreateShareResponse, EndShareResponse, RecipientSnapshot, UploadTicket } from "../shared/contracts";
 
 export type ClientErrorCode = ApiErrorCode | "NETWORK";
 
@@ -10,8 +10,8 @@ export class ApiFailure extends Error {
 export const maxUploadBytes = 4 * 1024 * 1024;
 export const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp"];
 export const acceptedAudioTypes = ["audio/mpeg", "audio/mp3"];
-/** Videos upload straight to storage, so they may be larger than other files. */
-export const maxVideoUploadBytes = 50 * 1024 * 1024;
+/** Videos and PDFs upload straight to storage, so they may be larger than other files. */
+export const maxDirectUploadBytes = 50 * 1024 * 1024;
 export const acceptedVideoTypes = ["video/mp4"];
 export const acceptedPdfTypes = ["application/pdf"];
 
@@ -61,12 +61,12 @@ export async function createAudioShare(file: File): Promise<CreateShareResponse>
 }
 
 /** PUT with upload progress (fetch cannot report it). Same-origin URLs carry the session cookie; storage URLs do not. */
-function putFile(url: string, file: File, onProgress: (fraction: number) => void): Promise<void> {
+function putFile(url: string, file: File, type: string, onProgress: (fraction: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
     xhr.withCredentials = url.startsWith("/");
-    xhr.setRequestHeader("content-type", "video/mp4");
+    xhr.setRequestHeader("content-type", type);
     xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(event.loaded / event.total); };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) { onProgress(1); resolve(); }
@@ -77,20 +77,16 @@ function putFile(url: string, file: File, onProgress: (fraction: number) => void
   });
 }
 
-/** Video shares: reserve an upload, send the MP4 straight to storage, then let the server index it. */
-export async function createVideoShare(file: File, onProgress: (fraction: number) => void): Promise<CreateShareResponse> {
+/** Video and PDF shares: reserve an upload, send the file straight to storage, then let the server validate it. */
+async function createFromDirectUpload(kind: "video" | "pdf", type: string, file: File, onProgress: (fraction: number) => void): Promise<CreateShareResponse> {
   await ensureSession();
-  const slot = await request<VideoUploadTicket>("/api/shares/video/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ size: file.size, type: "video/mp4" }) });
-  await putFile(slot.uploadUrl, file, onProgress);
-  return request("/api/shares/video", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ uploadId: slot.uploadId }) });
+  const slot = await request<UploadTicket>(`/api/shares/${kind}/uploads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ size: file.size, type }) });
+  await putFile(slot.uploadUrl, file, type, onProgress);
+  return request(`/api/shares/${kind}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ uploadId: slot.uploadId }) });
 }
 
-export async function createPdfShare(file: File): Promise<CreateShareResponse> {
-  await ensureSession();
-  const form = new FormData();
-  form.append("pdf", file.type === "application/pdf" ? file : new File([file], file.name, { type: "application/pdf" }));
-  return request("/api/shares/pdf", { method: "POST", body: form });
-}
+export const createVideoShare = (file: File, onProgress: (fraction: number) => void) => createFromDirectUpload("video", "video/mp4", file, onProgress);
+export const createPdfShare = (file: File, onProgress: (fraction: number) => void) => createFromDirectUpload("pdf", "application/pdf", file, onProgress);
 
 export async function joinShare(shareId: string): Promise<RecipientSnapshot> {
   await ensureSession();
@@ -127,7 +123,7 @@ const messages: Partial<Record<ClientErrorCode, string>> = {
   INVALID_VIDEO: "รองรับเฉพาะวิดีโอ MP4 (H.264 แนะนำ) ที่มีภาพ",
   INVALID_PDF: "รองรับเฉพาะ PDF ที่ไม่ได้ใส่รหัสผ่าน",
   UPLOAD_NOT_FOUND: "อัปโหลดไม่สำเร็จหรือหมดเวลา ลองใหม่อีกครั้ง",
-  UPLOAD_TOO_LARGE: "ไฟล์ใหญ่เกินกำหนด (วิดีโอ 50 MB, ไฟล์อื่น 4 MB)",
+  UPLOAD_TOO_LARGE: "ไฟล์ใหญ่เกินกำหนด (วิดีโอและ PDF 50 MB, ไฟล์อื่น 4 MB)",
   SHARE_NOT_FOUND: "ไม่พบ share นี้",
   SHARE_EXPIRED: "share นี้หมดอายุแล้ว (เปิดได้ 24 ชั่วโมงหลังสร้าง)",
   SHARE_ENDED: "ผู้สร้างปิด share นี้แล้ว",
