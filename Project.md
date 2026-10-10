@@ -233,7 +233,7 @@ Implementation plan เลือก stack ต่อไปนี้ และ Tas
 
 Status: **Tasks 1–3 complete and reviewed; realtime/UI/production work remains.**
 
-ตรวจ workspace วันที่ 2026-10-10: source code, package manifest, tests และ build configuration มีอยู่แล้ว การตรวจ Task 3 รอบแรกพบการเปิดไฟล์ต้นฉบับผ่าน Vite และแก้แล้วโดยย้าย default `DATA_DIR` ออกนอก Vite root พร้อม deny rule และ regression test
+ตรวจ workspace วันที่ 2026-10-10: source code, package manifest, tests และ build configuration มีอยู่แล้ว การตรวจ Task 3 รอบแรกพบการเปิดไฟล์ต้นฉบับผ่าน Vite และแก้แล้วโดยย้าย default `DATA_DIR` ออกนอก Vite root พร้อม deny rule และ regression test ผลงาน checkpoint นี้ถูก commit และ push แล้วที่ `origin/master` (`9e206c1`)
 
 ### Defined
 

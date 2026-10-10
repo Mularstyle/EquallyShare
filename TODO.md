@@ -8,7 +8,11 @@
 
 ## In progress
 
-- [ ] Commit and push the verified Task 1–3 foundation (this handoff).
+- ไม่มีงานค้างจาก checkpoint นี้
+
+## Handoff checkpoint
+
+- [x] Commit and push the verified Task 1–3 foundation (`9e206c1` to `origin/master`).
 
 ## Next
 

@@ -46,4 +46,5 @@ Task 3: complete after fix round 1 (review clean; image collage, validation, sto
 
 - Scope pushed at this checkpoint: Tasks 1–3 plus project instructions and handoff documentation.
 - Remaining work: Tasks 4–7 in the canonical plan; no later task started in this checkpoint.
-- Remote commit SHA: pending until the authorized push completes.
+- Remote commit SHA: `9e206c1` on `origin/master`.
+- Verification at push: `npm test` (31 passed), `npm run typecheck`, `npm run build`; Task 3 re-review clean after the Vite storage-visibility fix.
