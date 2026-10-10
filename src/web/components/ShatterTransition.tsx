@@ -12,9 +12,13 @@ export default function ShatterTransition({ onComplete }: ShatterTransitionProps
   completeRef.current = onComplete;
 
   useEffect(() => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; completeRef.current(); } };
+    // Browsers pause animation frames in background tabs; never let the animation hold up opening the share.
+    const fallback = setTimeout(finish, 1_600);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) { completeRef.current(); return; }
+    if (!canvas || !ctx) { clearTimeout(fallback); finish(); return; }
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -67,10 +71,10 @@ export default function ShatterTransition({ onComplete }: ShatterTransitionProps
         ctx.restore();
       }
       if (frame < maxFrames) handle = requestAnimationFrame(animate);
-      else completeRef.current();
+      else finish();
     };
     handle = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(handle);
+    return () => { cancelAnimationFrame(handle); clearTimeout(fallback); };
   }, []);
 
   return (
