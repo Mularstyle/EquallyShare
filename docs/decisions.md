@@ -32,3 +32,17 @@
 - Reason: User decision for the hackathon demo.
 - Alternatives: Container host with persistent volume; 256-recipient default; `.txt` upload; one new share per demo round instead of End share.
 - Consequences: Load test targets 64 joins and expects #65 to get `429 RECIPIENT_LIMIT`. End share needs a Creator-only endpoint, an `ended` share status that rejects joins, and a realtime broadcast to open pages. Vercel conflicts with the single-process SQLite + `ws` design (no persistent disk, no long-lived WebSocket server); the storage/realtime approach must be chosen before Task 4 and recorded here.
+
+## Vercel + Supabase Free Tier (2026-10-10)
+
+- Context: Hosting must be Vercel (see above), which has no persistent disk and no long-lived WebSocket server, so the single-process SQLite + `ws` + `DATA_DIR` design cannot run there. The user chose to move everything onto hosted services and required free ones.
+- Decision:
+  - Backend: Vercel Functions (Node runtime, Hobby plan) serve the existing HTTP API. Business rules stay in `src/core`; `src/server` services are ported from `node:sqlite` to Postgres.
+  - Database: Supabase Postgres (free plan). Joins run in a transaction that locks the share row (`SELECT ... FOR UPDATE`) to keep idempotent, ordered recipient registration.
+  - Images: Supabase Storage, private bucket, accessed only by the backend with the service-role key. Collages are still rendered server-side with Sharp; originals never reach the browser.
+  - Realtime: Supabase Realtime Broadcast, one channel per share. The backend publishes only `{ revision, status }`; browsers then refetch their own snapshot over HTTP. No content is broadcast.
+  - Expiry and End share: enforced on every read/join from `expires_at`/`ended_at`; open pages learn via a broadcast (End share) or a client timer from `expiresAt` (expiry). Storage cleanup runs from a daily Vercel Cron job (the Hobby plan only allows daily cron).
+  - Upload limit drops from 5 MiB to 4 MiB because Vercel Functions reject request bodies over 4.5 MB.
+- Reason: Supabase's free plan covers database, file storage and realtime in one project (about 500 MB DB, 1 GB storage, 200 concurrent realtime connections), which is enough for a 64-person demo, and Vercel Hobby is free.
+- Alternatives: Neon/Upstash + Vercel Blob + Pusher/Ably (more services to wire up); polling instead of Realtime; Vercel frontend + separate Node host (rejected by user).
+- Consequences: `node:sqlite`, `DATA_DIR` and the Docker/persistent-volume tasks are replaced. Free Supabase projects pause after 7 days without activity; restore the project from the dashboard before a demo. Free plans have no backups, which is acceptable for 24-hour demo shares. Secrets (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, anon key) live in Vercel environment variables, never in the repo. Free-tier numbers come from third-party summaries; confirm them on supabase.com/pricing when creating the project.

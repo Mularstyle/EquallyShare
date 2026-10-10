@@ -22,7 +22,7 @@
 - Share หมดอายุเมื่อ `now >= expiresAt`; join หรือ reconnect ไม่ต่ออายุ
 - ข้อความว่างจากการหารเป็นผลลัพธ์ปกติและต้องแสดงข้อความตรงตัวว่า `คุณได้รับข้อมูล 0 ตัวอักษร`
 - เป้าหมาย deployment คือ Node process เดียวพร้อม persistent volume; multi-instance อยู่พ้น MVP
-- **อัปเดต 2026-10-10:** ผู้ใช้เลือก hosting เป็น Vercel ซึ่งขัดกับข้อด้านบน ต้องเลือกแนวทาง storage/realtime ก่อน Task 4 (ดู `docs/decisions.md`) และต้องเพิ่ม End share (Creator ปิด share ก่อนหมดอายุ)
+- **อัปเดต 2026-10-10:** ผู้ใช้เลือก hosting เป็น Vercel ซึ่งขัดกับข้อด้านบน เลือกแล้ว: Vercel Functions + Supabase free plan (Postgres, Storage, Realtime Broadcast) แทน SQLite/`ws`/Docker; Task 4 และ Task 7 ต้องปรับตาม `docs/decisions.md` และต้องเพิ่ม End share (Creator ปิด share ก่อนหมดอายุ)
 - ใช้ `PUBLIC_ORIGIN` สร้าง URL/QR และตรวจ HTTP/WebSocket origin; ห้ามเชื่อ Host header ที่ผู้ใช้ส่งมา
 - Runtime baseline คือ Node 22 ที่ตรวจว่า `DatabaseSync` ใช้งานได้แล้ว โมดูล `node:sqlite` ยังมีสถานะ experimental ใน Node 22 จึงต้อง pin Node 22 ใน runtime และมี repository tests ครอบ persistence
 - Package versions ต้อง resolve ให้รองรับ Node 22 และบันทึกใน `package-lock.json` ตอนลงมือทำ ห้ามเดาเลขเวอร์ชันในแผน

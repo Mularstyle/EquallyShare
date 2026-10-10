@@ -193,6 +193,8 @@ New recipient joins
 
 ## Tech Stack and External Dependencies
 
+**อัปเดต 2026-10-10:** deployment เปลี่ยนเป็น Vercel Functions + Supabase (Postgres, Storage, Realtime Broadcast) บน free plan; `node:sqlite`, `ws` และ persistent volume ด้านล่างเป็นของ Task 1–3 และจะถูกแทนที่ Upload limit ลดเป็น 4 MiB เพราะ Vercel จำกัด request body 4.5 MB
+
 Implementation plan เลือก stack ต่อไปนี้ และ Task 1–3 ได้ติดตั้ง/สร้างส่วนที่ระบุแล้ว:
 
 - Node.js 22 และ TypeScript
@@ -271,10 +273,7 @@ Status: **Tasks 1–3 complete and reviewed; realtime/UI/production work remains
 
 ตัดสินแล้ว 2026-10-10: hosting = Vercel, ผู้ชม 64 คน, ยังไม่รับ `.txt`, เพิ่ม End share (ดู Confirmed Requirements 14–17)
 
-1. **Vercel ขัดกับ architecture ปัจจุบัน:** Vercel Functions เป็น serverless ไม่มี persistent disk สำหรับ `node:sqlite`/`DATA_DIR` และไม่รัน WebSocket server (`ws`) ระยะยาว ต้องเลือกแนวทางก่อนเริ่ม Task 4:
-   - (a) ย้าย state ไป hosted database (เช่น Postgres/Redis ผ่าน Vercel Marketplace), ภาพไป Vercel Blob และ realtime ไปบริการ pub/sub ภายนอก หรือ polling
-   - (b) Frontend บน Vercel และ backend Node ตัวเดิมบน host ที่มี persistent volume + WebSocket
-   ยังไม่ได้เลือกแนวทางและยังไม่อนุมัติค่าใช้จ่าย
+1. **ตัดสินแล้ว:** รันบน Vercel Functions + Supabase free plan (Postgres, Storage แบบ private, Realtime Broadcast) แทน SQLite/`ws`/`DATA_DIR` รายละเอียดอยู่ใน `docs/decisions.md` หัวข้อ *Vercel + Supabase Free Tier* ยังต้องให้ผู้ใช้สร้าง Supabase project และ Vercel project แล้วตั้ง environment variables
 2. Reset ผู้รับใน URL เดิมยังไม่ได้ตกลง (End share แล้วสร้าง share ใหม่ใช้แทนได้)
 
 Implementation plan และ code ที่ทำแล้วใช้ deterministic 32×32 tile stream, exact pixel quota และ shelf-packed collage; ใช้ HttpOnly browser session cookie และ SQLite/local persistent storage บน single instance ส่วน Web Locks ยังรอ Task 5/6 การเลือกเหล่านี้เป็น implementation decisions ที่บันทึกไว้ใน `docs/decisions.md`
