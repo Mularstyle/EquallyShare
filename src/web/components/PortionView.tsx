@@ -98,51 +98,12 @@ const clock = (ms: number) => {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 };
 
-/** Where a segment sits in the whole track or clip. */
-function Timeline({ startMs, durationMs, totalDurationMs }: { startMs: number; durationMs: number; totalDurationMs: number }) {
-  const left = totalDurationMs ? (startMs / totalDurationMs) * 100 : 0;
-  const width = totalDurationMs ? (durationMs / totalDurationMs) * 100 : 0;
-  return (
-    <div className="space-y-1" aria-hidden="true">
-      <div className="relative h-4 border-2 border-gray-400 bg-gray-200">
-        {width > 0 && <div className="absolute inset-y-0 bg-gradient-to-b from-blue-400 to-blue-600" style={{ left: `${left}%`, width: `max(${width}%, 2px)` }} />}
-      </div>
-      <div className="flex justify-between text-[11px] text-gray-500 font-mono"><span>0:00</span><span>{clock(totalDurationMs)}</span></div>
-    </div>
-  );
-}
-
-const seconds = (ms: number) => (ms / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 });
-
-function VideoPortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "video" } } }) {
-  const { videoUrl, startMs, durationMs, totalDurationMs, segmentCount } = snapshot.allocation;
-  const [loading, setLoading] = useState(true);
-  useEffect(() => setLoading(Boolean(videoUrl)), [videoUrl]);
-  return (
-    <div className="space-y-3">
-      <div className="bg-white border-2 border-gray-300 p-2 space-y-3">
-        {segmentCount === 0 ? (
-          <p className="text-gray-500 italic text-center py-8">คุณได้รับข้อมูล 0 วินาที</p>
-        ) : (
-          <div className="relative bg-black flex items-center justify-center min-h-[160px]">
-            {/* The server redirects to a short-lived link for this segment only, so the player can stream and seek. */}
-            <video key={videoUrl} src={videoUrl ?? undefined} controls playsInline preload="metadata" className="w-full max-h-[50vh]"
-              onLoadedData={() => setLoading(false)} onError={() => { setLoading(false); onStale(); }} aria-label={`ช่วงวิดีโอของคุณ ${clock(startMs)} ถึง ${clock(startMs + durationMs)}`} />
-            {loading && <LoaderCircle size={32} className="absolute animate-spin text-white pointer-events-none" />}
-          </div>
-        )}
-        <Timeline startMs={startMs} durationMs={durationMs} totalDurationMs={totalDurationMs} />
-      </div>
-      <p className="text-xs text-gray-600">
-        {segmentCount === 0 ? `ได้ 0 จาก ${clock(totalDurationMs)}` : `ได้ช่วง ${clock(startMs)}–${clock(startMs + durationMs)} (${seconds(durationMs)} วินาที) จาก ${clock(totalDurationMs)}`} ({percent(durationMs, totalDurationMs)}%)
-      </p>
-    </div>
-  );
-}
-
 function AudioPortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "audio" } } }) {
   const { audioUrl, startMs, durationMs, totalDurationMs, frameCount } = snapshot.allocation;
   const { src, loading, failed } = useMediaUrl(audioUrl, onStale);
+  const left = totalDurationMs ? (startMs / totalDurationMs) * 100 : 0;
+  const width = totalDurationMs ? (durationMs / totalDurationMs) * 100 : 0;
+
   return (
     <div className="space-y-3">
       <div className="bg-white border-2 border-gray-300 p-4 space-y-3">
@@ -155,7 +116,13 @@ function AudioPortion({ snapshot, onStale }: PortionViewProps & { snapshot: Reci
             {loading && <LoaderCircle size={28} className="absolute left-1/2 -translate-x-1/2 animate-spin text-blue-600" />}
           </div>
         )}
-        <Timeline startMs={startMs} durationMs={durationMs} totalDurationMs={totalDurationMs} />
+        {/* Where this segment sits in the whole track. */}
+        <div className="space-y-1" aria-hidden="true">
+          <div className="relative h-4 border-2 border-gray-400 bg-gray-200">
+            {width > 0 && <div className="absolute inset-y-0 bg-gradient-to-b from-blue-400 to-blue-600" style={{ left: `${left}%`, width: `max(${width}%, 2px)` }} />}
+          </div>
+          <div className="flex justify-between text-[11px] text-gray-500 font-mono"><span>0:00</span><span>{clock(totalDurationMs)}</span></div>
+        </div>
       </div>
       <p className="text-xs text-gray-600">
         {frameCount === 0 ? `ได้ 0 จาก ${clock(totalDurationMs)}` : `ได้ช่วง ${clock(startMs)}–${clock(startMs + durationMs)} (${(durationMs / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} วินาที) จาก ${clock(totalDurationMs)}`} ({percent(durationMs, totalDurationMs)}%)
@@ -172,9 +139,7 @@ export default function PortionView({ snapshot, onStale }: PortionViewProps) {
         ? <TextPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "text" } }} />
         : snapshot.allocation.kind === "image"
           ? <ImagePortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "image" } }} onStale={onStale} />
-          : snapshot.allocation.kind === "audio"
-            ? <AudioPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "audio" } }} onStale={onStale} />
-            : <VideoPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "video" } }} onStale={onStale} />}
+          : <AudioPortion snapshot={snapshot as RecipientSnapshot & { allocation: { kind: "audio" } }} onStale={onStale} />}
     </motion.div>
   );
 }

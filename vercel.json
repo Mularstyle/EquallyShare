@@ -2,29 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "vite build",
   "outputDirectory": "dist/client",
-  "regions": [
-    "hnd1"
-  ],
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "node_modules/ffmpeg-static/ffmpeg",
-      "maxDuration": 60
-    }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/cleanup",
-      "schedule": "0 3 * * *"
-    }
-  ],
+  "regions": ["hnd1"],
+  "crons": [{ "path": "/api/cron/cleanup", "schedule": "0 3 * * *" }],
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
-      "source": "/s/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/s/(.*)", "destination": "/index.html" }
   ]
 }

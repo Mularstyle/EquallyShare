@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, Scissors, Users } from "lucide-react";
-import { createAudioShare, createImageShare, createTextShare, createVideoShare, errorMessage } from "../api";
+import { createAudioShare, createImageShare, createTextShare, errorMessage } from "../api";
 import ContentInput, { type ContentDraft } from "../components/ContentInput";
 import GenerateButton from "../components/GenerateButton";
 import ShatterTransition from "../components/ShatterTransition";
@@ -17,7 +17,7 @@ type State = "idle" | "creating" | "shattering";
 
 function HowItWorks() {
   const rows = [
-    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ข้อความ ภาพ เพลง MP3 หรือวิดีโอ MP4 ถูกแบ่งให้ผู้รับทุกคนคนละส่วน (เพลงและวิดีโอแบ่งเป็นช่วงเวลาต่อกัน)" },
+    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ข้อความ ภาพ หรือเพลง MP3 ถูกแบ่งให้ผู้รับทุกคนคนละส่วน (เพลงแบ่งเป็นช่วงเวลาต่อกัน)" },
     { icon: <Users size={18} />, text: "คุณคือผู้รับ #1 · ทุกคนที่เปิดลิงก์หรือสแกน QR ทำให้ส่วนของทุกคนเล็กลงทันที (สูงสุด 64 คน)" },
     { icon: <Clock size={18} />, text: "แก้ต้นฉบับไม่ได้ · share หมดอายุใน 24 ชั่วโมง หรือเมื่อคุณกด End share" },
   ];
@@ -53,13 +53,12 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
   const [content, setContent] = useState<ContentDraft>({ type: "text", text: "" });
   const [error, setError] = useState("");
   const [createdId, setCreatedId] = useState<string>();
-  const [progress, setProgress] = useState<number>();
 
   const validate = (): string | undefined => {
     if (content.type === "text") {
       if (content.text.trim().length === 0) return "พิมพ์ข้อความก่อนแชร์";
       if (countUnits(content.text) > maxTextUnits) return "ข้อความยาวเกินไป";
-    } else if (!content.file) return content.type === "image" ? "เลือกภาพก่อนแชร์" : content.type === "audio" ? "เลือกไฟล์ MP3 ก่อนแชร์" : "เลือกวิดีโอ MP4 ก่อนแชร์";
+    } else if (!content.file) return content.type === "image" ? "เลือกภาพก่อนแชร์" : "เลือกไฟล์ MP3 ก่อนแชร์";
     return undefined;
   };
 
@@ -68,13 +67,11 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
     const problem = validate();
     if (problem) { setError(problem); return; }
     setError("");
-    setProgress(undefined);
     setState("creating");
     try {
       const response = content.type === "text" ? await createTextShare(content.text)
         : content.type === "image" ? await createImageShare(content.file!)
-        : content.type === "audio" ? await createAudioShare(content.file!)
-        : await createVideoShare(content.file!, setProgress);
+        : await createAudioShare(content.file!);
       setCreatedId(response.snapshot.shareId);
       setState("shattering");
     } catch (failure) {
@@ -117,7 +114,7 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
 
             <div className="border-t-2 border-gray-400 px-4 py-2 text-sm text-gray-700 flex items-center gap-2" style={{ background: "#ECE9D8" }}>
               <div className={`w-2 h-2 rounded-full ${state === "idle" ? (error ? "bg-red-500" : "bg-green-500") : "bg-yellow-500 animate-pulse"}`} />
-              <span>{state === "idle" ? (error ? "Error Occurred" : "System Ready") : state === "creating" ? (progress === undefined ? "Uploading..." : progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : "Indexing keyframes...") : "Dividing..."}</span>
+              <span>{state === "idle" ? (error ? "Error Occurred" : "System Ready") : state === "creating" ? "Uploading..." : "Dividing..."}</span>
               <div className="flex-1" />
               <span className="text-xs opacity-60">EquallyShare v1.0</span>
             </div>

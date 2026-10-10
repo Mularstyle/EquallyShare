@@ -3,14 +3,12 @@ import { randomUUID } from "node:crypto";
 import multer from "multer";
 import QRCode from "qrcode";
 import { allocateGridCell } from "../core/collage.js";
-import type { ApiError, CreateShareResponse, EndShareResponse, RecipientSnapshot, VideoUploadTicket } from "../shared/contracts.js";
+import type { ApiError, CreateShareResponse, EndShareResponse, RecipientSnapshot } from "../shared/contracts.js";
 import type { ServerConfig } from "./config.js";
 import { IdentityService, type Clock } from "./identity.js";
 import { AudioService } from "./audio-service.js";
-import { VideoService } from "./video-service.js";
 import { ImageService } from "./image-service.js";
 import { FileImageStore, SupabaseImageStore, type ImageStore } from "./image-store.js";
-import { partitionRange } from "../core/partition.js";
 import { NoopNotifier, SupabaseBroadcastNotifier, type ShareNotifier } from "./notifier.js";
 import { ShareError, ShareService } from "./share-service.js";
 import type { Sql } from "./sql.js";
@@ -38,18 +36,6 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
   const shares = new ShareService(sql, clock, config);
   const images = new ImageService(imageStore, config.maxImagePixels, config.maxImageEdge);
   const audio = new AudioService(imageStore);
-  const video = new VideoService();
-  // Video cuts run ffmpeg; queue them so a burst of joins cannot start dozens of processes at once.
-  let activeCuts = 0;
-  const cutQueue: (() => void)[] = [];
-  const withCutSlot = async <T>(work: () => Promise<T>): Promise<T> => {
-    if (activeCuts >= config.maxConcurrentRenders) await new Promise<void>((resolve) => cutQueue.push(resolve));
-    activeCuts++;
-    try { return await work(); }
-    finally { activeCuts--; cutQueue.shift()?.(); }
-  };
-  const segmentsInFlight = new Map<string, Promise<void>>();
-  const segmentKey = (shareId: string, start: number, count: number) => `segments/${shareId}/g${start}-${count}.mp4`;
   const uploader = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes, files: 1, fields: 0, parts: 1 } });
   const upload = uploader.single("image");
   const uploadAudio = uploader.single("audio");
@@ -175,20 +161,8 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
       const { shares: removed, imagePaths } = await shares.cleanup();
       let imageErrors = 0;
       for (const path of imagePaths) {
-        try {
-          if (path.endsWith(".mp3")) await audio.deleteSource(path);
-          else if (path.endsWith(".mp4")) {
-            const shareId = path.slice(0, -4);
-            await video.forget(path);
-            for (const entry of await imageStore.list(`segments/${shareId}`)) await imageStore.delete(entry.key);
-            if (imageStore instanceof FileImageStore) await imageStore.removeFolder(`segments/${shareId}`);
-            await imageStore.delete(path);
-          } else await images.deleteSource({ path, width: 0, height: 0, totalPixels: 0 });
-        } catch (error) { imageErrors++; console.error("Media cleanup failed", error); }
-      }
-      // Direct uploads that were never turned into a share.
-      for (const entry of await imageStore.list("uploads")) {
-        if (entry.createdAt !== undefined && entry.createdAt < clock() - 3_600_000) await imageStore.delete(entry.key).catch(() => undefined);
+        try { await (path.endsWith(".mp3") ? audio.deleteSource(path) : images.deleteSource({ path, width: 0, height: 0, totalPixels: 0 })); }
+        catch (error) { imageErrors++; console.error("Image cleanup failed", error); }
       }
       response.json({ removedShares: removed, removedImages: imagePaths.length - imageErrors, imageErrors });
     } catch (error) { next(error); }
@@ -253,105 +227,6 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
     } catch (error) { next(error); }
   });
 
-  // Video, step 1: reserve an upload. In production the browser PUTs the MP4 straight to Supabase Storage.
-  app.post("/api/shares/video/uploads", async (request, response, next) => {
-    try {
-      const visitorId = await visitor(request);
-      const size = Number(request.body?.size);
-      if (request.body?.type !== "video/mp4") throw new ShareError("INVALID_VIDEO", 415, "Only MP4 video is supported");
-      if (!Number.isSafeInteger(size) || size <= 0) throw new ShareError("INVALID_VIDEO", 400, "File size is required");
-      if (size > config.maxVideoUploadBytes) throw new ShareError("UPLOAD_TOO_LARGE", 413, "Video exceeds upload limit");
-      const uploadId = await shares.createPendingUpload(visitorId);
-      const uploadUrl = await imageStore.createUploadUrl(`uploads/${uploadId}.mp4`) ?? `/api/uploads/${uploadId}`;
-      response.status(201).json({ uploadId, uploadUrl } satisfies VideoUploadTicket);
-    } catch (error) { next(error); }
-  });
-
-  // Local development only: storage without signed upload URLs receives the PUT through the API.
-  app.put("/api/uploads/:uploadId", express.raw({ type: () => true, limit: config.maxVideoUploadBytes }), async (request, response, next) => {
-    try {
-      if (!(imageStore instanceof FileImageStore)) throw new ShareError("UPLOAD_NOT_FOUND", 404, "Upload directly to storage");
-      const uploadId = String(request.params.uploadId);
-      if (!await shares.ownsPendingUpload(uploadId, await visitor(request))) throw new ShareError("UPLOAD_NOT_FOUND", 404, "Upload not found");
-      if (!Buffer.isBuffer(request.body) || request.body.length === 0) throw new ShareError("INVALID_VIDEO", 400, "Empty upload");
-      await imageStore.put(`uploads/${uploadId}.mp4`, request.body);
-      response.status(204).end();
-    } catch (error) { next(error); }
-  });
-
-  // Video, step 2: validate the uploaded MP4, read its keyframes and create the share.
-  app.post("/api/shares/video", async (request, response, next) => {
-    const uploadId = String(request.body?.uploadId ?? "");
-    const uploadKey = `uploads/${uploadId}.mp4`;
-    try {
-      const visitorId = await visitor(request);
-      if (!await shares.ownsPendingUpload(uploadId, visitorId) || !await imageStore.exists(uploadKey)) throw new ShareError("UPLOAD_NOT_FOUND", 404, "Upload not found");
-      const data = await imageStore.get(uploadKey);
-      if (data.length > config.maxVideoUploadBytes) throw new ShareError("UPLOAD_TOO_LARGE", 413, "Video exceeds upload limit");
-      const index = video.inspect(data);
-      const shareId = randomUUID();
-      const path = `${shareId}.mp4`;
-      await imageStore.move(uploadKey, path);
-      await shares.deletePendingUpload(uploadId);
-      let snapshot: RecipientSnapshot;
-      try { snapshot = await shares.createVideo(visitorId, { path, index }); }
-      catch (error) { await imageStore.delete(path); throw error; }
-      const shareUrl = `${config.publicOrigin}/s/${encodeURIComponent(snapshot.shareId)}`;
-      let qrDataUrl: string | null = null;
-      try { qrDataUrl = await QRCode.toDataURL(shareUrl); }
-      catch { /* The committed share remains usable. */ }
-      response.status(201).json({ shareUrl, qrDataUrl, qrStatus: qrDataUrl ? "ready" : "unavailable", snapshot } satisfies CreateShareResponse);
-    } catch (error) {
-      // A rejected file is not kept around.
-      if (error instanceof ShareError && error.code !== "UPLOAD_NOT_FOUND" && error.code !== "UNAUTHENTICATED") {
-        await imageStore.delete(uploadKey).catch(() => undefined);
-        await shares.deletePendingUpload(uploadId).catch(() => undefined);
-      }
-      next(error);
-    }
-  });
-
-  // This Recipient's current video segment only. Cuts are cached in storage per GOP range and served
-  // through a short-lived signed URL (Vercel cannot return bodies above 4.5 MB, and players need range requests).
-  app.get("/api/shares/:shareId/video", async (request, response, next) => {
-    response.setHeader("Cache-Control", "private, no-store");
-    try {
-      const visitorId = await visitor(request);
-      const shareId = String(request.params.shareId);
-      const revisionText = request.query.revision;
-      if (typeof revisionText !== "string" || !/^[1-9]\d*$/.test(revisionText) || !Number.isSafeInteger(Number(revisionText))) throw new ShareError("STALE_REVISION", 409, "Valid revision required");
-      const segment = await shares.getVideo(shareId, visitorId);
-      if (Number(revisionText) !== segment.snapshot.revision) {
-        response.status(409).json({ code: "STALE_REVISION", message: "Share revision changed", currentRevision: segment.snapshot.revision, recipientCount: segment.snapshot.recipientCount });
-        return;
-      }
-      if (segment.count === 0) { response.status(204).end(); return; }
-      const key = segmentKey(shareId, segment.start, segment.count);
-      if (!await imageStore.exists(key)) {
-        let pending = segmentsInFlight.get(key);
-        if (!pending) {
-          pending = withCutSlot(async () => {
-            const cut = await video.cut(segment.path, () => imageStore.get(segment.path), segment.index, segment.start, segment.count);
-            await imageStore.put(key, cut).catch(async (error: unknown) => { if (!await imageStore.exists(key)) throw error; });
-            // Keep storage small: drop cached cuts that no longer match the current recipient count.
-            const current = new Set(Array.from({ length: segment.snapshot.recipientCount }, (_, i) => {
-              const range = partitionRange(segment.index.keyframesMs.length, segment.snapshot.recipientCount, i + 1);
-              return segmentKey(shareId, range.start, range.length);
-            }));
-            for (const entry of await imageStore.list(`segments/${shareId}`)) {
-              if (!current.has(entry.key)) await imageStore.delete(entry.key).catch(() => undefined);
-            }
-          }).finally(() => segmentsInFlight.delete(key));
-          segmentsInFlight.set(key, pending);
-        }
-        await pending;
-      }
-      const signed = await imageStore.createDownloadUrl(key, 600);
-      if (signed) { response.redirect(302, signed); return; }
-      response.sendFile((imageStore as FileImageStore).path(key), { headers: { "Content-Type": "video/mp4", "Cache-Control": "private, no-store" } });
-    } catch (error) { next(error); }
-  });
-
   const errors: ErrorRequestHandler = (error: unknown, request, response, _next) => {
     if (error instanceof multer.MulterError) {
       const tooLarge = error.code === "LIMIT_FILE_SIZE";
@@ -368,8 +243,7 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
       return;
     }
     if (error instanceof Error && "type" in error && error.type === "entity.too.large") {
-      const upload = request.path.startsWith("/api/uploads/");
-      response.status(413).json({ code: upload ? "UPLOAD_TOO_LARGE" : "TEXT_TOO_LARGE", message: "Request body too large" } satisfies ApiError);
+      response.status(413).json({ code: "TEXT_TOO_LARGE", message: "Request body too large" } satisfies ApiError);
       return;
     }
     response.status(500).json({ code: "INTERNAL_ERROR", message: "Unexpected server error" } satisfies ApiError);

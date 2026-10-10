@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { partitionRange, partitionText, segmentText } from "../core/partition.js";
 import { frameDurationMs } from "../core/mp3.js";
-import { gopRange, type GopIndex } from "../core/mp4.js";
 import { allocateGridCell } from "../core/collage.js";
 import type { ApiErrorCode, RecipientSnapshot } from "../shared/contracts.js";
 import type { Clock, VisitorId } from "./identity.js";
@@ -9,7 +8,7 @@ import type { StoredAudio } from "./audio-service.js";
 import type { StoredImage } from "./image-service.js";
 import type { Queryable, Sql } from "./sql.js";
 
-type ShareRow = { id: string; content_type: string; original_text: string | null; image_path: string | null; image_width: number | null; image_height: number | null; audio_frame_count: number | null; audio_sample_rate: number | null; audio_samples_per_frame: number | null; video_index: string | null; created_at: number; expires_at: number; recipient_count: number; revision: number; status: string };
+type ShareRow = { id: string; content_type: string; original_text: string | null; image_path: string | null; image_width: number | null; image_height: number | null; audio_frame_count: number | null; audio_sample_rate: number | null; audio_samples_per_frame: number | null; created_at: number; expires_at: number; recipient_count: number; revision: number; status: string };
 type RecipientRow = { join_order: number };
 export type JoinResult = { snapshot: RecipientSnapshot; joined: boolean };
 
@@ -58,47 +57,6 @@ export class ShareService {
       await tx.query("INSERT INTO recipients (share_id, visitor_id, join_order, joined_at) VALUES ($1, $2, 1, $3)", [id, visitorId, now]);
       return this.snapshotFor(await this.getShare(tx, id), 1);
     });
-  }
-
-  async createVideo(visitorId: VisitorId, original: { path: string; index: GopIndex }): Promise<RecipientSnapshot> {
-    const id = original.path.replace(/\.mp4$/, "");
-    if (!uuidPattern.test(id) || original.path !== `${id}.mp4` || original.index.keyframesMs.length < 1) throw new Error("Invalid stored video");
-    const index: GopIndex = { durationMs: original.index.durationMs, keyframesMs: original.index.keyframesMs, keyframeSamples: original.index.keyframeSamples, sampleCount: original.index.sampleCount };
-    const now = this.clock();
-    return this.sql.transaction(async (tx) => {
-      await tx.query("INSERT INTO shares (id, content_type, image_path, video_index, created_at, expires_at, recipient_count, revision, status) VALUES ($1, 'video', $2, $3, $4, $5, 1, 1, 'active')",
-        [id, original.path, JSON.stringify(index), now, now + this.options.shareTtlHours * 3_600_000]);
-      await tx.query("INSERT INTO recipients (share_id, visitor_id, join_order, joined_at) VALUES ($1, $2, 1, $3)", [id, visitorId, now]);
-      return this.snapshotFor(await this.getShare(tx, id), 1);
-    });
-  }
-
-  /** The caller's current video segment (GOP range), plus the whole range layout for the current recipient count. */
-  async getVideo(shareId: string, visitorId: VisitorId): Promise<{ path: string; index: GopIndex; start: number; count: number; snapshot: RecipientSnapshot }> {
-    const snapshot = await this.getSnapshot(shareId, visitorId);
-    const row = await this.getShare(this.sql, shareId);
-    if (row.content_type !== "video" || !row.image_path || !row.video_index) throw new ShareError("INVALID_VIDEO", 400, "Share has no video");
-    const index = JSON.parse(row.video_index) as GopIndex;
-    const { start, length } = partitionRange(index.keyframesMs.length, snapshot.recipientCount, snapshot.recipientNumber);
-    return { path: row.image_path, index, start, count: length, snapshot };
-  }
-
-  /** Reserves an upload slot for a direct browser → storage video upload. */
-  async createPendingUpload(visitorId: VisitorId): Promise<string> {
-    const id = randomUUID();
-    await this.sql.query("INSERT INTO pending_uploads (id, visitor_id, created_at) VALUES ($1, $2, $3)", [id, visitorId, this.clock()]);
-    return id;
-  }
-
-  /** True when the upload slot exists, belongs to this visitor and is less than an hour old. */
-  async ownsPendingUpload(uploadId: string, visitorId: VisitorId): Promise<boolean> {
-    if (!uuidPattern.test(uploadId)) return false;
-    const [row] = await this.sql.query("SELECT 1 FROM pending_uploads WHERE id = $1 AND visitor_id = $2 AND created_at > $3", [uploadId, visitorId, this.clock() - 3_600_000]);
-    return Boolean(row);
-  }
-
-  async deletePendingUpload(uploadId: string): Promise<void> {
-    await this.sql.query("DELETE FROM pending_uploads WHERE id = $1", [uploadId]);
   }
 
   /** The caller's current audio segment (frame range) plus the storage key of the original. */
@@ -151,7 +109,6 @@ export class ShareService {
     return this.sql.transaction(async (tx) => {
       const removed = await tx.query<{ image_path: string | null }>("DELETE FROM shares WHERE status <> 'active' OR expires_at <= $1 RETURNING image_path", [now]);
       await tx.query("DELETE FROM sessions WHERE expires_at <= $1", [now]);
-      await tx.query("DELETE FROM pending_uploads WHERE created_at <= $1", [now - 3_600_000]);
       return { shares: removed.length, imagePaths: removed.flatMap((row) => row.image_path ? [row.image_path] : []) };
     });
   }
@@ -201,21 +158,6 @@ export class ShareService {
           audioUrl: length ? `/api/shares/${encodeURIComponent(share.id)}/audio?revision=${share.revision}` : null,
           startMs: Math.round(start * frameMs), durationMs: Math.round(length * frameMs), totalDurationMs: Math.round(share.audio_frame_count * frameMs),
           frameCount: length, totalFrames: share.audio_frame_count,
-        },
-      };
-    }
-    if (share.content_type === "video" && share.video_index) {
-      const index = JSON.parse(share.video_index) as GopIndex;
-      const { start, length } = partitionRange(index.keyframesMs.length, share.recipient_count, recipientNumber);
-      const { startMs, endMs } = gopRange(index, start, length);
-      return {
-        shareId: share.id, revision: share.revision, status: "active", recipientNumber,
-        recipientCount: share.recipient_count, maxRecipients: this.options.maxRecipients, expiresAt: new Date(share.expires_at).toISOString(),
-        allocation: {
-          kind: "video",
-          videoUrl: length ? `/api/shares/${encodeURIComponent(share.id)}/video?revision=${share.revision}` : null,
-          startMs: length ? startMs : 0, durationMs: length ? endMs - startMs : 0, totalDurationMs: index.durationMs,
-          segmentCount: length, totalSegments: index.keyframesMs.length,
         },
       };
     }
