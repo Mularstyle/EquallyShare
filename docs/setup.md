@@ -29,12 +29,13 @@ Free projects pause after 7 days without activity. Before a demo, open the dashb
 
 ## Vercel (Hobby, free)
 
-1. Import the GitHub repo as a Vercel project. `vercel.json` sets the build (`vite build` → `dist/client`) and routes `/api/*` to `api/index.ts`.
+1. Import the GitHub repo as a Vercel project (Root Directory `./`). `vercel.json` sets the build (`vite build` → `dist/client`), routes `/api/*` to `api/index.ts`, and pins functions to Tokyo (`hnd1`) next to the Supabase database in `ap-northeast-1`; change the region if the database moves.
+   The repo is public because Vercel's free Hobby plan blocks deployments of private-repo commits by anyone other than the Vercel account owner.
 2. **Settings → Environment Variables** (Production):
    - `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
    - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (read at build time; redeploy after changing them)
    - `CRON_SECRET`: any long random string. Vercel Cron calls `/api/cron/cleanup` daily at 03:00 UTC with it, deleting ended/expired shares, their images and expired sessions.
-   - `PUBLIC_ORIGIN` = the deployment origin, e.g. `https://<project>.vercel.app` (no trailing slash). Share URLs and QR codes use it, and requests from other origins are rejected.
+   - `PUBLIC_ORIGIN` = the production origin, e.g. `https://<project>.vercel.app` (no trailing slash). Share URLs and QR codes use it, and requests from other origins are rejected, so preview deployments (different URLs) cannot create shares.
 3. Deploy, then check `https://<project>.vercel.app/api/health` returns `{"status":"ok"}`.
 
 Never commit real keys; `.env` files are git-ignored and `.env.example` holds names only.
