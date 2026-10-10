@@ -2,7 +2,7 @@ import express, { type ErrorRequestHandler, type Express, type Request } from "e
 import { randomUUID } from "node:crypto";
 import multer from "multer";
 import QRCode from "qrcode";
-import { allocateCollage, createTileStream } from "../core/collage.js";
+import { allocateGridCell } from "../core/collage.js";
 import type { ApiError, CreateShareResponse, EndShareResponse, RecipientSnapshot } from "../shared/contracts.js";
 import type { ServerConfig } from "./config.js";
 import { IdentityService, type Clock } from "./identity.js";
@@ -167,7 +167,7 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
       activeRenders++;
       let png: Buffer;
       try {
-        const plan = allocateCollage(createTileStream(image.width, image.height, shareId), snapshot.recipientCount, snapshot.recipientNumber);
+        const plan = allocateGridCell(image.width, image.height, snapshot.recipientCount, snapshot.recipientNumber);
         png = await images.renderCollage(image, plan);
       } finally { activeRenders--; }
       const latest = await shares.getSnapshot(shareId, visitorId);

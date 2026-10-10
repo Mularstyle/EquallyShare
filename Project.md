@@ -36,7 +36,7 @@ Last updated: 2026-10-10 (Asia/Bangkok)
 7. นับผู้รับสะสม ปิดเว็บแล้วจำนวนผู้รับไม่ลดและไม่คืนส่วนแบ่ง
 8. ผู้รับเดิม refresh หรือเปิด share เดิมหลายแท็บใน browser เดิมไม่เพิ่มตัวหาร
 9. Creator ถูกนับเป็นผู้รับตั้งแต่สร้าง share
-10. ภาพของแต่ละผู้รับเป็น collage จากเศษภาพหลายตำแหน่งที่นำมาจัดรวมกัน
+10. ภาพถูกแบ่งเป็นตาราง (grid) ผู้รับแต่ละคนได้ภาพหนึ่งบล็อกสี่เหลี่ยมต่อกันเป็นชิ้นเดียว ไม่สลับตำแหน่ง (เปลี่ยนจาก collage เศษกระจาย ยืนยัน 2026-10-10)
 11. แก้ต้นฉบับหลังสร้าง share ไม่ได้; หากต้องการเปลี่ยนข้อมูลให้สร้าง share ใหม่
 12. Share หมดอายุ 24 ชั่วโมงนับจากเวลาสร้าง
 13. หากข้อความไม่พอแบ่ง ยังรับผู้รับเพิ่มตามปกติ ผู้รับที่ได้ส่วนว่างเห็นข้อความระบบ **“คุณได้รับข้อมูล 0 ตัวอักษร”** ไม่ถือเป็น error และไม่หยุดการแชร์
@@ -92,7 +92,7 @@ Last updated: 2026-10-10 (Asia/Bangkok)
 
 ## Domain Rules and Decisions
 
-Counting policy, การจำผู้รับเดิมใน browser, การนับ Creator, ภาพแบบ collage, ต้นฉบับคงที่, อายุ 24 ชั่วโมง และการให้ส่วนว่างเมื่อข้อความไม่พอแบ่งเป็นพฤติกรรมที่ยืนยันแล้ว รายละเอียดแบ่งเศษและ layout ที่มีป้ายกำกับเป็นข้อเสนอทาง implementation
+Counting policy, การจำผู้รับเดิมใน browser, การนับ Creator, ภาพแบบ grid หนึ่งบล็อกต่อคน, ต้นฉบับคงที่, อายุ 24 ชั่วโมง และการให้ส่วนว่างเมื่อข้อความไม่พอแบ่งเป็นพฤติกรรมที่ยืนยันแล้ว รายละเอียดแบ่งเศษและ layout ที่มีป้ายกำกับเป็นข้อเสนอทาง implementation
 
 ### Recipient Identity and Counting
 
@@ -133,20 +133,20 @@ Counting policy, การจำผู้รับเดิมใน browser, �
 
 ### Image Partitioning
 
-- **Confirmed:** แต่ละ Recipient ได้เศษภาพหลายชิ้นจากตำแหน่งต่าง ๆ ของต้นฉบับ มาจัดรวมกันเป็น collage ของตัวเอง ไม่ใช่แถบภาพใหญ่หนึ่งชิ้น
-- เมื่อมีผู้รับใหม่ ระบบ repartition ต้นฉบับให้ทุกคน และแทนที่ collage ที่เปิดอยู่แบบ real time โดยไม่ต้องใช้ animation
+- **Confirmed (2026-10-10, แทนแบบ collage เศษกระจาย):** ภาพถูกแบ่งเป็นตาราง N ช่อง ผู้รับแต่ละคนได้หนึ่งบล็อกสี่เหลี่ยมทึบตามตำแหน่งจริงของภาพ ไม่สลับหรือกระจายเศษ ผู้รับ #1 คือช่องซ้ายบน แล้วเรียงตามลำดับการอ่าน (ซ้าย→ขวา บน→ล่าง)
+- เมื่อมีผู้รับใหม่ ระบบ repartition ต้นฉบับให้ทุกคน และแทนที่ภาพที่เปิดอยู่แบบ real time โดยไม่ต้องใช้ animation
 - ปริมาณข้อมูลภาพต่อคนลดลงตามจำนวนผู้รับ; ไม่ใช้การย่อภาพต้นฉบับเต็มเป็นตัวแทนของการหารข้อมูล
 - Creator อยู่ในกฎแบ่งเดียวกับผู้รับอื่น หากมีเพียง Creator คนเดียวจะได้ข้อมูลภาพครบทั้งหมด
-- แต่ละ Recipient ได้เฉพาะเศษภาพปัจจุบันของตัวเอง ไม่มีต้นฉบับเต็มซ่อนอยู่ในหน้าเว็บ
+- แต่ละ Recipient ได้เฉพาะบล็อกปัจจุบันของตัวเอง ไม่มีต้นฉบับเต็มซ่อนอยู่ในหน้าเว็บ
 
-Implementation defaults ที่เสนอ:
+Implementation (`src/core/collage.ts`, `allocateGridCell`):
 
-- แบ่งเป็นชิ้นสี่เหลี่ยมจากต้นฉบับ แล้วกระจายหลายชิ้นต่อคน ให้พื้นที่รวมใกล้เคียง `1 / recipientCount` มากที่สุดในข้อจำกัด pixel และจำนวนชิ้น
-- ใน revision เดียวกัน เศษของแต่ละคนไม่ซ้ำกัน และทุกเศษรวมกันครอบคลุมต้นฉบับ ไม่สูญหายหรือซ้ำเพราะ algorithm
-- สร้าง crop จากต้นฉบับเสมอ ไม่ crop ต่อจาก collage ในรอบก่อน
-- จัดเศษที่ได้รับเป็น collage และแสดงจำนวนผู้รับกับพื้นที่ภาพที่ได้รับ เพื่อสื่อว่าข้อมูลลดลง
-- Recipient เดิม refresh ที่ revision เดิมต้องได้เศษและ layout เดิม; การ refresh ไม่ใช่การสุ่มชุดภาพใหม่
-- จำนวนเศษ ขนาด grid และวิธีจัด collage จะกำหนดระหว่างออกแบบ implementation ไม่ถือว่าเลือก algorithm นี้เสร็จแล้ว
+- จำนวนแถว = `round(sqrt(N × height / width))` (จำกัด 1..N) เพื่อให้แต่ละช่องใกล้สี่เหลี่ยมจัตุรัส เช่น ภาพจัตุรัส 4 คน = 2×2, 9 คน = 3×3
+- ถ้า N ไม่เต็มตาราง แถวบน `N % rows` แถวได้ช่องเพิ่มหนึ่งช่อง (เช่น 3 คน = 2 ช่องบน + 1 ช่องกว้างล่าง) ทุก pixel จึงมีเจ้าของคนเดียวเสมอ ไม่มีช่องที่ไม่มีเจ้าของ
+- ขอบช่องคำนวณจากขนาดภาพเต็มแบบปัดขึ้น ผู้รับลำดับต้นได้ pixel ที่เหลือก่อน เหมือนการแบ่งข้อความ
+- ใน revision เดียวกัน บล็อกของแต่ละคนไม่ซ้อนกันและรวมกันครอบคลุมต้นฉบับพอดี
+- สร้าง crop จากต้นฉบับเสมอ และแสดงจำนวนผู้รับกับพื้นที่ภาพที่ได้รับ เพื่อสื่อว่าข้อมูลลดลง
+- Deterministic: refresh ที่ revision เดิมได้บล็อกเดิม
 - หากข้อมูลไม่พอแจกทุกคน บาง Recipient อาจได้ส่วนว่าง และต้องแสดงสถานะนั้นตามปกติ
 
 ## Architecture Summary — Implemented foundation (Tasks 1–3)
@@ -186,7 +186,7 @@ New recipient joins
 | --- | --- |
 | `Share` | `shareId`, `contentType`, original content reference, `createdAt`, `expiresAt`, `recipientCount`, `revision` |
 | `Recipient` | `recipientId`, `shareId`, stable `joinOrder` |
-| `Allocation` | `shareId`, `recipientId`, `revision`; text range (`start`, `length`) or a list of image fragments and collage layout |
+| `Allocation` | `shareId`, `recipientId`, `revision`; text range (`start`, `length`) or one image grid cell |
 | `RecipientSnapshot` | current `revision`, recipient number, total recipients, content type, allocated content, empty-state flag |
 
 ต้นฉบับเป็น canonical source ของข้อมูล การเปลี่ยนจำนวนผู้รับสร้าง allocation ใหม่แต่ไม่แก้ต้นฉบับ
@@ -250,7 +250,7 @@ Status: **Tasks 1–3 complete and reviewed; realtime/UI/production work remains
 - Requirement ให้อัปเดตผู้รับเดิมแบบ real time
 - Animation ไม่จำเป็นใน MVP
 - ผู้รับสะสม, browser เดิมเป็นผู้รับเดิม, Creator ถูกนับเป็น #1
-- ภาพเป็น collage จากเศษหลายชิ้น ไม่ใช่แถบภาพหนึ่งชิ้น
+- ภาพแบ่งเป็น grid หนึ่งบล็อกต่อคน (เปลี่ยนจาก collage เศษกระจาย 2026-10-10)
 - ต้นฉบับแก้ไม่ได้ และ share หมดอายุ 24 ชั่วโมงหลังสร้าง
 - ข้อความไม่พอแบ่งยังรับคนเพิ่ม ผู้รับที่ได้ส่วนว่างเห็น “คุณได้รับข้อมูล 0 ตัวอักษร”
 - Implementation plan พร้อม task order, interfaces, failure tests และ acceptance run ที่ `docs/superpowers/plans/2026-10-10-share-division.md`
@@ -281,7 +281,7 @@ Status: **Tasks 1–3 complete and reviewed; realtime/UI/production work remains
 1. **ตัดสินแล้ว:** รันบน Vercel Functions + Supabase free plan (Postgres, Storage แบบ private, Realtime Broadcast) แทน SQLite/`ws`/`DATA_DIR` รายละเอียดอยู่ใน `docs/decisions.md` หัวข้อ *Vercel + Supabase Free Tier* ยังต้องให้ผู้ใช้สร้าง Supabase project และ Vercel project แล้วตั้ง environment variables
 2. Reset ผู้รับใน URL เดิมยังไม่ได้ตกลง (End share แล้วสร้าง share ใหม่ใช้แทนได้)
 
-Implementation plan และ code ที่ทำแล้วใช้ deterministic 32×32 tile stream, exact pixel quota และ shelf-packed collage; ใช้ HttpOnly browser session cookie และ SQLite/local persistent storage บน single instance ส่วน Web Locks ยังรอ Task 5/6 การเลือกเหล่านี้เป็น implementation decisions ที่บันทึกไว้ใน `docs/decisions.md`
+Code ปัจจุบันแบ่งภาพเป็น grid หนึ่งบล็อกต่อคน (แทน 32×32 tile stream และ shelf-packed collage เดิม); ใช้ HttpOnly browser session cookie และ SQLite/local persistent storage บน single instance ส่วน Web Locks ยังรอ Task 5/6 การเลือกเหล่านี้เป็น implementation decisions ที่บันทึกไว้ใน `docs/decisions.md`
 
 ## Current Milestone and Direction
 
@@ -305,7 +305,7 @@ Task 1–3 เสร็จและรีวิวแล้ว ส่วน Task
 - ตัวอย่าง `ABCDEFGH` ให้ผลตามตาราง 2 และ 4 recipients
 - Creator เป็นผู้รับ #1 ตั้งแต่สร้าง และตัวหารเริ่มต้นที่ 1
 - การปิดหน้าไม่ลดตัวหาร; refresh/หลายแท็บด้วย identity เดิมไม่เพิ่มตัวหาร
-- ภาพเป็น collage จากเศษหลายตำแหน่ง และแต่ละคนได้รับพื้นที่ลดลงเมื่อผู้รับเพิ่ม
+- ภาพแบ่งเป็น grid หนึ่งบล็อกต่อคน และแต่ละคนได้รับพื้นที่ลดลงเมื่อผู้รับเพิ่ม
 - ต้นฉบับแก้ไม่ได้ และ share หมดอายุ 24 ชั่วโมงหลังสร้าง ทั้งหน้าที่เปิดใหม่และหน้าที่ยังเชื่อมต่ออยู่
 - เมื่อ share ข้อความ `ABCDEFGH` มีผู้รับ 9 คน (รวม Creator) จะมีผู้รับที่ได้ส่วนว่างและเห็น “คุณได้รับข้อมูล 0 ตัวอักษร” โดยการเข้าร่วมยังทำงานตามปกติ
 - กฎแบ่งเศษ, Unicode และภาพเป็นไปตาม domain policy ที่เลือก และมี targeted tests
@@ -327,7 +327,7 @@ Project.md       Project context and current state (canonical document)
 AGENTS.md        Provider-neutral agent and handoff rules
 TODO.md          Actionable remaining work
 CHANGELOG.md     Verified task-level changes
-src/core         Partition and deterministic collage logic
+src/core         Text partition and image grid allocation
 src/server       SQLite, identity, share APIs, image storage/rendering
 src/shared       Wire contracts
 tests             Unit and integration coverage

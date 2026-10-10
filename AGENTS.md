@@ -31,7 +31,7 @@ Important project knowledge must be written to the repository so another agent c
 - Recipient count is cumulative. Closing a tab or disconnecting never removes a Recipient or restores a portion.
 - The same browser identity must remain one Recipient across refreshes, reconnects, and multiple tabs.
 - Text allocation uses grapheme clusters, preserves spaces/newlines, and recomputes from the immutable original.
-- Image allocation is a deterministic collage of fragments from different source areas. At N=1 it preserves the full image; at N>1 source pixels are owned exactly once across allocations.
+- Image allocation is a grid: each Recipient gets one solid, unshuffled rectangle of the original, numbered in reading order from the top-left. At N=1 it is the full image; at every N, source pixels are owned exactly once across allocations.
 - Existing Recipient pages update automatically after a new Recipient joins. Animation and sound are outside the MVP.
 - The original cannot be edited after a share is created.
 - Shares expire exactly 24 hours after creation using server time. Joining does not extend expiry.

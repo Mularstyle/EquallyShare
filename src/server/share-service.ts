@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { partitionText, segmentText } from "../core/partition.js";
-import { allocateCollage, createTileStream } from "../core/collage.js";
+import { allocateGridCell } from "../core/collage.js";
 import type { ApiErrorCode, RecipientSnapshot } from "../shared/contracts.js";
 import type { Clock, VisitorId } from "./identity.js";
 import type { StoredImage } from "./image-service.js";
@@ -117,7 +117,7 @@ export class ShareService {
 
   private snapshotFor(share: ShareRow, recipientNumber: number): RecipientSnapshot {
     if (share.content_type === "image" && share.image_width && share.image_height) {
-      const image = allocateCollage(createTileStream(share.image_width, share.image_height, share.id), share.recipient_count, recipientNumber);
+      const image = allocateGridCell(share.image_width, share.image_height, share.recipient_count, recipientNumber);
       return {
         shareId: share.id, revision: share.revision, status: "active", recipientNumber,
         recipientCount: share.recipient_count, maxRecipients: this.options.maxRecipients, expiresAt: new Date(share.expires_at).toISOString(),

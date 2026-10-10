@@ -16,7 +16,7 @@
 - Alternatives: localStorage-only IDs, accounts, IP address, or one WebSocket connection per Recipient.
 - Consequences: A new browser/device or cleared cookie may count as a new Recipient; this is an intentional MVP limitation.
 
-## Deterministic Image Collage
+## Deterministic Image Collage (superseded 2026-10-10 by Image Grid Split)
 
 - Context: Every image Recipient needs scattered fragments, exact ownership, and stable refresh behavior.
 - Decision: Shuffle a fixed source tile stream by share ID, allocate exact pixel intervals, and pack each Recipient's rectangles into a collage. Preserve the original layout when N=1.
@@ -54,3 +54,11 @@
 - Reason: PGlite is real Postgres, so row locks, constraints and triggers behave as in production and tests need no server. PNG plus the cache keeps storage egress small: a 64-person image demo re-renders collages roughly 2,000 times, which at 4 MB of raw RGBA per download would exceed the free plan's monthly egress. RLS stops the browser-visible anon key from reading tables through Supabase's auto-generated REST API.
 - Alternatives: A Docker Postgres for tests; storing raw RGBA; supabase-js queries instead of SQL.
 - Consequences: Tests do not exercise the `postgres` driver itself; verify it once against Supabase. The render-concurrency limit and image cache are per function instance.
+
+## Image Grid Split (2026-10-10)
+
+- Context: The user found the scattered 32×32 tile collage too scrambled and asked for a grid split instead, choosing "one block per person".
+- Decision: Split the image into N near-square cells (`rows = round(sqrt(N × height / width))`, clamped to 1..N; the first `N % rows` rows get one extra cell). Recipient #1 gets the top-left cell, then reading order. Each Recipient's portion is that one rectangle, shown unshuffled. Boundaries round up so earlier Recipients keep leftover pixels, matching the text split.
+- Reason: Each person sees a recognizable piece of the real picture, and the pieces visibly fit back together on a demo screen.
+- Alternatives: Keeping scattered tiles at their real positions; a regular round-robin tile pattern; a plain N-column strip split.
+- Consequences: Replaces `createTileStream`/`allocateCollage` with `allocateGridCell`; shares are no longer equal to the pixel (cells differ by at most one row/column of pixels, and rows with an extra cell have narrower cells). `fragmentCount` is now 1, or 0 for an empty cell. The confirmed requirement in Project.md is updated.

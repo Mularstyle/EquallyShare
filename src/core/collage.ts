@@ -1,75 +1,40 @@
-import { createHash } from "node:crypto";
-
 export type SourceRect = { x: number; y: number; width: number; height: number };
 export type PlacedFragment = SourceRect & { destX: number; destY: number };
 export type CollagePlan = { canvasWidth: number; canvasHeight: number; pixelCount: number; fragments: PlacedFragment[] };
 
-export function createTileStream(width: number, height: number, shareId: string, gridSize = 32): readonly SourceRect[] {
-  if (![width, height, gridSize].every((value) => Number.isSafeInteger(value) && value > 0)) throw new RangeError("Image and grid dimensions must be positive integers");
-  const tiles: { rect: SourceRect; index: number; hash: Buffer }[] = [];
-  for (let row = 0; row < gridSize; row++) {
-    const y = Math.floor(row * height / gridSize);
-    const bottom = Math.floor((row + 1) * height / gridSize);
-    for (let column = 0; column < gridSize; column++) {
-      const x = Math.floor(column * width / gridSize);
-      const right = Math.floor((column + 1) * width / gridSize);
-      if (right > x && bottom > y) {
-        const index = row * gridSize + column;
-        tiles.push({ rect: { x, y, width: right - x, height: bottom - y }, index, hash: createHash("sha256").update(`${shareId}:${index}`).digest() });
-      }
-    }
-  }
-  tiles.sort((a, b) => Buffer.compare(a.hash, b.hash) || a.index - b.index);
-  return tiles.map(({ rect }) => rect);
+export type GridLayout = { rows: number; columnsPerRow: number[] };
+
+/**
+ * Splits N recipients into rows of near-square cells for a width×height image.
+ * Rows may hold different cell counts (the first N % rows rows get one extra), so the cells
+ * always tile the whole image exactly: no unowned leftover cell when N is not a perfect grid.
+ */
+export function gridLayout(width: number, height: number, recipientCount: number): GridLayout {
+  if (![width, height, recipientCount].every((value) => Number.isSafeInteger(value) && value > 0)) throw new RangeError("Image dimensions and recipient count must be positive integers");
+  const rows = Math.min(recipientCount, Math.max(1, Math.round(Math.sqrt(recipientCount * height / width))));
+  const base = Math.floor(recipientCount / rows);
+  const extra = recipientCount % rows;
+  return { rows, columnsPerRow: Array.from({ length: rows }, (_, row) => base + (row < extra ? 1 : 0)) };
 }
 
-export function allocateCollage(tiles: readonly SourceRect[], recipientCount: number, recipientNumber: number): CollagePlan {
-  if (!Number.isSafeInteger(recipientCount) || recipientCount < 1 || !Number.isSafeInteger(recipientNumber) || recipientNumber < 1 || recipientNumber > recipientCount) throw new RangeError("Invalid recipient");
-  const total = tiles.reduce((sum, tile) => sum + tile.width * tile.height, 0);
-  const base = Math.floor(total / recipientCount);
-  const remainder = total % recipientCount;
-  const start = (recipientNumber - 1) * base + Math.min(recipientNumber - 1, remainder);
-  const pixelCount = base + (recipientNumber <= remainder ? 1 : 0);
-  if (pixelCount === 0) return { canvasWidth: 0, canvasHeight: 0, pixelCount, fragments: [] };
-  if (recipientCount === 1) {
-    const canvasWidth = Math.max(...tiles.map((tile) => tile.x + tile.width));
-    const canvasHeight = Math.max(...tiles.map((tile) => tile.y + tile.height));
-    return { canvasWidth, canvasHeight, pixelCount, fragments: [{ x: 0, y: 0, width: canvasWidth, height: canvasHeight, destX: 0, destY: 0 }] };
-  }
-  const owned: SourceRect[] = [];
-  const end = start + pixelCount;
-  let offset = 0;
-  for (const tile of tiles) {
-    const tileEnd = offset + tile.width * tile.height;
-    const localStart = Math.max(0, start - offset);
-    const localEnd = Math.min(tileEnd - offset, end - offset);
-    if (localEnd > localStart) {
-      let position = localStart;
-      while (position < localEnd) {
-        const row = Math.floor(position / tile.width);
-        const column = position % tile.width;
-        const length = Math.min(localEnd - position, tile.width - column);
-        const last = owned.at(-1);
-        if (column === 0 && length === tile.width && last && last.x === tile.x && last.width === tile.width && last.y + last.height === tile.y + row) last.height++;
-        else owned.push({ x: tile.x + column, y: tile.y + row, width: length, height: 1 });
-        position += length;
-      }
-    }
-    offset = tileEnd;
-    if (offset >= end) break;
-  }
-  const shelfWidth = Math.max(Math.max(...owned.map((rect) => rect.width)), Math.ceil(Math.sqrt(pixelCount)));
-  const fragments: PlacedFragment[] = [];
-  let destX = 0;
-  let destY = 0;
-  let shelfHeight = 0;
-  let usedWidth = 0;
-  for (const rect of owned) {
-    if (destX + rect.width > shelfWidth) { destY += shelfHeight; destX = 0; shelfHeight = 0; }
-    fragments.push({ ...rect, destX, destY });
-    destX += rect.width;
-    shelfHeight = Math.max(shelfHeight, rect.height);
-    usedWidth = Math.max(usedWidth, destX);
-  }
-  return { canvasWidth: usedWidth, canvasHeight: destY + shelfHeight, pixelCount, fragments };
+/**
+ * One solid block per recipient: recipient #1 is the top-left cell, numbered in reading order.
+ * Cells come from integer boundaries of the full image, so every source pixel belongs to exactly
+ * one recipient. A cell can be empty when there are more recipients than pixels in that direction.
+ */
+export function allocateGridCell(width: number, height: number, recipientCount: number, recipientNumber: number): CollagePlan {
+  if (!Number.isSafeInteger(recipientNumber) || recipientNumber < 1 || recipientNumber > recipientCount) throw new RangeError("Invalid recipient");
+  const { rows, columnsPerRow } = gridLayout(width, height, recipientCount);
+  let index = recipientNumber - 1;
+  let row = 0;
+  while (index >= columnsPerRow[row]!) index -= columnsPerRow[row++]!;
+  const columns = columnsPerRow[row]!;
+  // Rounding boundaries up gives leftover pixels to earlier recipients, like the text split.
+  const y = Math.ceil(row * height / rows);
+  const cellHeight = Math.ceil((row + 1) * height / rows) - y;
+  const x = Math.ceil(index * width / columns);
+  const cellWidth = Math.ceil((index + 1) * width / columns) - x;
+  const pixelCount = cellWidth * cellHeight;
+  if (pixelCount === 0) return { canvasWidth: 0, canvasHeight: 0, pixelCount: 0, fragments: [] };
+  return { canvasWidth: cellWidth, canvasHeight: cellHeight, pixelCount, fragments: [{ x, y, width: cellWidth, height: cellHeight, destX: 0, destY: 0 }] };
 }

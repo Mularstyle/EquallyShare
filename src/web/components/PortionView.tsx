@@ -29,7 +29,7 @@ function TextPortion({ snapshot }: { snapshot: RecipientSnapshot & { allocation:
 }
 
 function ImagePortion({ snapshot, onStale }: PortionViewProps & { snapshot: RecipientSnapshot & { allocation: { kind: "image" } } }) {
-  const { imageUrl, pixelCount, totalPixels, fragmentCount, width, height } = snapshot.allocation;
+  const { imageUrl, pixelCount, totalPixels, width, height } = snapshot.allocation;
   const [src, setSrc] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -75,13 +75,13 @@ function ImagePortion({ snapshot, onStale }: PortionViewProps & { snapshot: Reci
         {pixelCount === 0 ? (
           <p className="text-gray-500 italic text-center py-8 bg-white/80 px-3">คุณได้รับข้อมูล 0 พิกเซล</p>
         ) : src ? (
-          <img src={src} alt={`ชิ้นส่วนภาพของคุณ ${fragmentCount} ชิ้น`} width={width} height={height} className={`max-w-full max-h-[50vh] object-contain transition-opacity ${loading ? "opacity-50" : ""}`} style={{ imageRendering: "pixelated" }} />
+          <img src={src} alt={`ส่วนของภาพที่คุณได้รับ ${width}×${height} พิกเซล`} width={width} height={height} className={`max-w-full max-h-[50vh] object-contain transition-opacity ${loading ? "opacity-50" : ""}`} />
         ) : failed ? (
           <p className="text-red-600 text-sm">โหลดภาพไม่สำเร็จ</p>
         ) : null}
         {loading && <LoaderCircle size={32} className="absolute animate-spin text-blue-600" />}
       </div>
-      <p className="text-xs text-gray-600">ได้ {pixelCount.toLocaleString()} จาก {totalPixels.toLocaleString()} พิกเซล ({percent(pixelCount, totalPixels)}%) · {fragmentCount.toLocaleString()} ชิ้น</p>
+      <p className="text-xs text-gray-600">ได้ {pixelCount.toLocaleString()} จาก {totalPixels.toLocaleString()} พิกเซล ({percent(pixelCount, totalPixels)}%){pixelCount > 0 && ` · บล็อก ${width}×${height}`}</p>
     </div>
   );
 }
