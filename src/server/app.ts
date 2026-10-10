@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import multer from "multer";
 import QRCode from "qrcode";
 import { allocateCollage, createTileStream } from "../core/collage.js";
-import type { ApiError, CreateShareResponse, RecipientSnapshot } from "../shared/contracts.js";
+import type { ApiError, CreateShareResponse, EndShareResponse, RecipientSnapshot } from "../shared/contracts.js";
 import type { ServerConfig } from "./config.js";
 import { IdentityService, type Clock } from "./identity.js";
 import { ImageService } from "./image-service.js";
@@ -108,6 +108,35 @@ export function createApp({ sql, config, clock = Date.now, imageStore = imageSto
         catch (error) { console.error("Realtime publish failed", error); }
       }
       response.json(snapshot);
+    } catch (error) { next(error); }
+  });
+
+  app.post("/api/shares/:shareId/end", async (request, response, next) => {
+    try {
+      const shareId = String(request.params.shareId);
+      const { revision, changed } = await shares.end(shareId, await visitor(request));
+      if (changed) {
+        try { await notifier.publish(shareId, { revision, status: "ended" }); }
+        catch (error) { console.error("Realtime publish failed", error); }
+      }
+      response.json({ shareId, status: "ended", revision } satisfies EndShareResponse);
+    } catch (error) { next(error); }
+  });
+
+  // Daily Vercel Cron job; Vercel sends the CRON_SECRET as a bearer token.
+  app.get("/api/cron/cleanup", async (request, response, next) => {
+    try {
+      if (!config.cronSecret || request.headers.authorization !== `Bearer ${config.cronSecret}`) {
+        response.status(401).json({ code: "UNAUTHENTICATED", message: "Cron secret required" } satisfies ApiError);
+        return;
+      }
+      const { shares: removed, imagePaths } = await shares.cleanup();
+      let imageErrors = 0;
+      for (const path of imagePaths) {
+        try { await images.deleteSource({ path, width: 0, height: 0, totalPixels: 0 }); }
+        catch (error) { imageErrors++; console.error("Image cleanup failed", error); }
+      }
+      response.json({ removedShares: removed, removedImages: imagePaths.length - imageErrors, imageErrors });
     } catch (error) { next(error); }
   });
 

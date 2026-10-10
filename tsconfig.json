@@ -11,7 +11,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node", "vite/client"]
   },
-  "include": ["src/shared/**/*.ts", "src/core/**/*.ts", "tests/**/*.ts", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src/shared/**/*.ts", "src/core/**/*.ts", "src/web/**/*.ts", "src/web/**/*.tsx", "tests/**/*.ts", "vite.config.ts", "vitest.config.ts"]
 }

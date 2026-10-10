@@ -172,3 +172,15 @@ it("limits concurrent renders and discards a render after the revision changes",
     expect(await stale.json()).toMatchObject({ code: "STALE_REVISION", currentRevision: 2 });
   } finally { release(); spy.mockRestore(); }
 });
+
+it("removes stored originals of cleaned-up image shares", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "equallyshare-images-")); directories.push(directory);
+  const server = await startTestServer({ dataDir: directory, cronSecret: "secret" }); servers.push(server);
+  const creator = await session(server);
+  const created = await (await upload(server, creator, await fixture())).json() as CreateShareResponse;
+  expect(readdirSync(join(directory, "originals"))).toEqual([`${created.snapshot.shareId}.png`]);
+  await fetch(`${server.origin}/api/shares/${created.snapshot.shareId}/end`, { method: "POST", headers: { cookie: creator } });
+  const cleanup = await fetch(`${server.origin}/api/cron/cleanup`, { headers: { authorization: "Bearer secret" } });
+  expect(await cleanup.json()).toEqual({ removedShares: 1, removedImages: 1, imageErrors: 0 });
+  expect(readdirSync(join(directory, "originals"))).toEqual([]);
+});

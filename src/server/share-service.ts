@@ -67,6 +67,29 @@ export class ShareService {
     });
   }
 
+  /** Only the Creator (recipient #1) can end a share. Ending is idempotent and bumps the revision once. */
+  async end(shareId: string, visitorId: VisitorId): Promise<{ revision: number; changed: boolean }> {
+    return this.sql.transaction(async (tx) => {
+      const share = await this.getShare(tx, shareId, true);
+      const recipient = await this.getRecipient(tx, shareId, visitorId);
+      if (recipient?.join_order !== 1) throw new ShareError("NOT_CREATOR", 403, "Only the creator can end this share");
+      if (share.status === "ended") return { revision: share.revision, changed: false };
+      this.assertActive(share);
+      await tx.query("UPDATE shares SET status = 'ended', revision = $1 WHERE id = $2", [share.revision + 1, shareId]);
+      return { revision: share.revision + 1, changed: true };
+    });
+  }
+
+  /** Deletes ended and expired shares (recipients cascade) and expired sessions; returns image keys to remove from storage. */
+  async cleanup(): Promise<{ shares: number; imagePaths: string[] }> {
+    const now = this.clock();
+    return this.sql.transaction(async (tx) => {
+      const removed = await tx.query<{ image_path: string | null }>("DELETE FROM shares WHERE status <> 'active' OR expires_at <= $1 RETURNING image_path", [now]);
+      await tx.query("DELETE FROM sessions WHERE expires_at <= $1", [now]);
+      return { shares: removed.length, imagePaths: removed.flatMap((row) => row.image_path ? [row.image_path] : []) };
+    });
+  }
+
   async getSnapshot(shareId: string, visitorId: VisitorId): Promise<RecipientSnapshot> {
     const share = await this.getShare(this.sql, shareId);
     this.assertActive(share);
@@ -88,6 +111,7 @@ export class ShareService {
   }
 
   private assertActive(share: ShareRow): void {
+    if (share.status === "ended") throw new ShareError("SHARE_ENDED", 410, "The creator ended this share");
     if (share.status === "expired" || this.clock() >= share.expires_at) throw new ShareError("SHARE_EXPIRED", 410, "Share has expired");
   }
 
@@ -96,7 +120,7 @@ export class ShareService {
       const image = allocateCollage(createTileStream(share.image_width, share.image_height, share.id), share.recipient_count, recipientNumber);
       return {
         shareId: share.id, revision: share.revision, status: "active", recipientNumber,
-        recipientCount: share.recipient_count, expiresAt: new Date(share.expires_at).toISOString(),
+        recipientCount: share.recipient_count, maxRecipients: this.options.maxRecipients, expiresAt: new Date(share.expires_at).toISOString(),
         allocation: { kind: "image", imageUrl: image.pixelCount ? `/api/shares/${encodeURIComponent(share.id)}/collage?revision=${share.revision}` : null, pixelCount: image.pixelCount, totalPixels: share.image_width * share.image_height, width: image.canvasWidth, height: image.canvasHeight, fragmentCount: image.fragments.length },
       };
     }
@@ -109,6 +133,7 @@ export class ShareService {
       status: "active",
       recipientNumber,
       recipientCount: share.recipient_count,
+      maxRecipients: this.options.maxRecipients,
       expiresAt: new Date(share.expires_at).toISOString(),
       allocation: { kind: "text", text: part.text, unitCount: part.length, totalUnits: segmentText(share.original_text).length },
     };

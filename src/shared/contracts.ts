@@ -1,5 +1,5 @@
 export type ContentType = "text" | "image";
-export type ShareStatus = "active" | "expired";
+export type ShareStatus = "active" | "expired" | "ended";
 
 export type TextAllocation = {
   kind: "text";
@@ -24,6 +24,7 @@ export type RecipientSnapshot = {
   status: ShareStatus;
   recipientNumber: number;
   recipientCount: number;
+  maxRecipients: number;
   expiresAt: string;
   allocation: TextAllocation | ImageAllocation;
 };
@@ -46,6 +47,8 @@ export type ApiErrorCode =
   | "ORIGIN_NOT_ALLOWED"
   | "SHARE_NOT_FOUND"
   | "SHARE_EXPIRED"
+  | "SHARE_ENDED"
+  | "NOT_CREATOR"
   | "UNAUTHENTICATED"
   | "NOT_A_RECIPIENT"
   | "RECIPIENT_LIMIT"
@@ -54,7 +57,9 @@ export type ApiErrorCode =
   | "INTERNAL_ERROR";
 
 export type ApiError = { code: ApiErrorCode; message: string; currentRevision?: number; recipientCount?: number };
-export type ServerEvent =
-  | { type: "snapshot"; snapshot: RecipientSnapshot }
-  | { type: "expired"; shareId: string; expiresAt: string }
-  | { type: "error"; code: ApiErrorCode; message: string };
+export type EndShareResponse = { shareId: string; status: "ended"; revision: number };
+
+/** Realtime signal on Supabase channel `shareChannel(id)`. It carries no content: pages refetch their own snapshot. */
+export type ShareChangedEvent = { revision: number; status: ShareStatus };
+export const shareChannel = (shareId: string) => `share:${shareId}`;
+export const shareChangedEvent = "share-changed";

@@ -24,7 +24,7 @@ export const schemaSql = `
     expires_at BIGINT NOT NULL,
     recipient_count INTEGER NOT NULL CHECK (recipient_count > 0),
     revision INTEGER NOT NULL CHECK (revision > 0),
-    status TEXT NOT NULL CHECK (status IN ('active', 'expired'))
+    status TEXT NOT NULL CHECK (status IN ('active', 'expired', 'ended'))
   );
   CREATE TABLE IF NOT EXISTS recipients (
     share_id UUID NOT NULL REFERENCES shares(id) ON DELETE CASCADE,

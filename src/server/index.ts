@@ -3,6 +3,7 @@ import { loadConfig } from "./config.js";
 import { openDatabase } from "./db.js";
 
 // Local development server. On Vercel the same app is served from api/index.ts.
+try { process.loadEnvFile(".env"); } catch { /* .env is optional locally */ }
 const config = loadConfig();
 const sql = await openDatabase(config);
 const app = createApp({ sql, config });

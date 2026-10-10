@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: #245edc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@layer utilities {
+  .xp-button {
+    @apply bg-gradient-to-b from-blue-400 to-blue-600 text-white font-semibold px-6 py-3 border-2 border-blue-700 shadow-xp relative overflow-hidden;
+  }
+
+  .xp-button-silver {
+    @apply px-4 py-2 font-semibold text-gray-800 border-2 border-t-white border-l-white border-r-gray-600 border-b-gray-600;
+    background: #ECE9D8;
+    box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.1), inset -1px -1px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .xp-panel {
+    @apply border-2 border-gray-400 shadow-xp;
+    background: #ECE9D8;
+  }
+
+  .xp-window {
+    @apply bg-white overflow-hidden;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #d0d0d0, #a0a0a0);
+  border: 1px solid #808080;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #e0e0e0, #b0b0b0);
+}
+
+/* Scanline effect */
+.scanlines::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.03) 0px,
+    rgba(0, 0, 0, 0.03) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Custom cursor trail */
+.cursor-trail {
+  position: fixed;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(60, 145, 255, 0.4) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 9999;
+  animation: cursorPulse 2s infinite;
+}
+
+@keyframes cursorPulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.5); opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .scanlines::before {
+    display: none;
+  }
+}

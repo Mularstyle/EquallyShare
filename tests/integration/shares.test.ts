@@ -271,3 +271,47 @@ it("enables row level security on every table so the public Supabase key reads n
   const tables = await current.sql.query<{ relname: string; relrowsecurity: boolean }>("SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('sessions', 'shares', 'recipients') ORDER BY relname");
   expect(tables).toEqual([{ relname: "recipients", relrowsecurity: true }, { relname: "sessions", relrowsecurity: true }, { relname: "shares", relrowsecurity: true }]);
 });
+
+it("lets only the creator end a share, then rejects joins and snapshots", async () => {
+  const current = await server();
+  const creator = await session(current.origin);
+  const id = (await (await create(current.origin, creator, "ABCDEFGH")).json() as CreateShareResponse).snapshot.shareId;
+  const visitor = await session(current.origin);
+  await joinShare(current.origin, visitor, id);
+  const denied = await fetch(`${current.origin}/api/shares/${id}/end`, { method: "POST", headers: { cookie: visitor } });
+  expect(denied.status).toBe(403);
+  expect(await denied.json()).toMatchObject({ code: "NOT_CREATOR" });
+  const ended = await fetch(`${current.origin}/api/shares/${id}/end`, { method: "POST", headers: { cookie: creator } });
+  expect(ended.status).toBe(200);
+  expect(await ended.json()).toEqual({ shareId: id, status: "ended", revision: 3 });
+  const again = await fetch(`${current.origin}/api/shares/${id}/end`, { method: "POST", headers: { cookie: creator } });
+  expect(await again.json()).toEqual({ shareId: id, status: "ended", revision: 3 });
+  expect(current.events.at(-1)).toEqual({ shareId: id, event: { revision: 3, status: "ended" } });
+  expect(current.events.filter((item) => item.event.status === "ended")).toHaveLength(1);
+  const latecomer = await session(current.origin);
+  const join = await fetch(`${current.origin}/api/shares/${id}/join`, { method: "POST", headers: { cookie: latecomer } });
+  expect(join.status).toBe(410);
+  expect(await join.json()).toMatchObject({ code: "SHARE_ENDED" });
+  const snapshot = await fetch(`${current.origin}/api/shares/${id}/snapshot`, { headers: { cookie: visitor } });
+  expect(snapshot.status).toBe(410);
+  expect(await snapshot.json()).toMatchObject({ code: "SHARE_ENDED" });
+});
+
+it("cleans up ended and expired shares only with the cron secret", async () => {
+  let now = fixedNow;
+  const current = await startTestServer({ clock: () => now, cronSecret: "test-cron-secret" });
+  servers.push(current);
+  const creator = await session(current.origin);
+  const ids = [];
+  for (let i = 0; i < 3; i++) ids.push((await (await create(current.origin, creator, "ABCDEFGH")).json() as CreateShareResponse).snapshot.shareId);
+  await fetch(`${current.origin}/api/shares/${ids[0]}/end`, { method: "POST", headers: { cookie: creator } });
+  expect((await fetch(`${current.origin}/api/cron/cleanup`)).status).toBe(401);
+  expect((await fetch(`${current.origin}/api/cron/cleanup`, { headers: { authorization: "Bearer wrong" } })).status).toBe(401);
+  const first = await fetch(`${current.origin}/api/cron/cleanup`, { headers: { authorization: "Bearer test-cron-secret" } });
+  expect(await first.json()).toEqual({ removedShares: 1, removedImages: 0, imageErrors: 0 });
+  now += 24 * 3_600_000;
+  const second = await fetch(`${current.origin}/api/cron/cleanup`, { headers: { authorization: "Bearer test-cron-secret" } });
+  expect(await second.json()).toMatchObject({ removedShares: 2 });
+  expect(await rows(current.sql, "shares")).toBe(0);
+  expect(await rows(current.sql, "recipients")).toBe(0);
+});

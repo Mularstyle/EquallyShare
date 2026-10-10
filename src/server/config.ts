@@ -10,6 +10,8 @@ export type ServerConfig = {
   supabaseUrl: string | undefined;
   supabaseServiceRoleKey: string | undefined;
   storageBucket: string;
+  /** Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`; cleanup is disabled when unset. */
+  cronSecret: string | undefined;
   sessionTtlHours: number;
   shareTtlHours: number;
   maxTextGraphemes: number;
@@ -41,7 +43,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     throw new Error("PUBLIC_ORIGIN must be an absolute HTTP(S) origin without path, query or credentials");
   }
   return {
-    port: integer("PORT", 3000, 0, 65535),
+    // Local API port; Vite serves the UI on 3000 and proxies /api here.
+    port: integer("PORT", 3001, 0, 65535),
     publicOrigin: origin.origin,
     // Keep the default outside Vite's project root: dev middleware can serve files inside it.
     dataDir: resolve(env.DATA_DIR ?? "../equallyshare-private-data"),
@@ -49,6 +52,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     supabaseUrl: optional("SUPABASE_URL"),
     supabaseServiceRoleKey: optional("SUPABASE_SERVICE_ROLE_KEY"),
     storageBucket: env.SUPABASE_STORAGE_BUCKET ?? "share-originals",
+    cronSecret: optional("CRON_SECRET"),
     sessionTtlHours: integer("SESSION_TTL_HOURS", 168, 1),
     shareTtlHours: integer("SHARE_TTL_HOURS", 24, 1),
     maxTextGraphemes: integer("MAX_TEXT_GRAPHEMES", 20_000, 1),

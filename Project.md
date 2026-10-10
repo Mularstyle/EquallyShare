@@ -261,11 +261,12 @@ Status: **Tasks 1–3 complete and reviewed; realtime/UI/production work remains
 
 - Backend port (2026-10-10): Postgres ผ่าน `Sql` interface (Supabase ใน production, PGlite ใน tests/dev), ภาพต้นฉบับเป็น PNG ใน private Supabase Storage bucket, RLS ทุกตาราง, realtime signal `{ revision, status }` เมื่อมีผู้รับใหม่, Vercel entry `api/index.ts` + `vercel.json`, upload 4 MiB; ผ่าน 34 tests, typecheck และ server build วิธีตั้งค่าอยู่ใน `docs/setup.md`
 
+- Web UI (2026-10-10): `src/web/` ใช้ดีไซน์ Windows XP จาก branch `frontend` แต่ต่อกับ API จริง หน้า Creator (TEXT/IMAGE) และหน้า `/s/:id` แสดงส่วนของผู้รับแบบ live, URL + QR, ปุ่ม End share สำหรับผู้รับ #1, สถานะ ended/expired/not found/limit/offline และ layout มือถือ; End share API และ daily cleanup cron เสร็จแล้ว ตรวจด้วยมือใน browser ผ่าน
+
 ### Not Implemented or Verified
 
-- ฝั่ง browser ของ realtime (subscribe Supabase channel, refetch snapshot, reconnect), End share และ daily cleanup ของ share ที่หมดอายุ
 - `postgres` driver กับ Supabase จริงยังไม่ได้ทดสอบ (tests ใช้ PGlite)
-- `vite build` ยังล้มเหลวเพราะยังไม่มี `src/web/main.tsx` (Task 5); branch `frontend` เป็น prototype เก่าที่ไม่ได้ต่อกับ API นี้
+- Realtime ผ่าน Supabase จริงยังไม่ได้ทดสอบ (local ใช้ polling ทุก 2 วินาที)
 - React Creator/Recipient UI, Web Locks bootstrap, responsive/loading/error states และ QR fallback display
 - Playwright multi-browser/restart checks และ bounded demo load test
 - Production static serving, Docker packaging, setup/demo documentation และ public HTTPS/mobile flow

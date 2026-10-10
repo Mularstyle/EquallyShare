@@ -8,6 +8,9 @@
 
 - [x] Port backend to Postgres (Supabase in prod, PGlite in tests/dev), private image storage (Supabase Storage / local disk), Vercel Function entry, 4 MiB uploads, RLS on all tables, realtime signal on join. 34 tests pass.
 
+- [x] End share (creator-only endpoint, `ended` status, realtime signal, UI button) and daily Vercel Cron cleanup of ended/expired shares, images and sessions.
+- [x] Creator/Recipient React UI on the `frontend` branch's XP design: TEXT/IMAGE input, live portion view, URL + QR, End share, Web Locks session bootstrap, Supabase Realtime with polling fallback, loading/ended/expired/not-found/limit/offline states, phone layout. Verified by hand in a browser.
+
 ## In progress
 
 - ไม่มีงานค้างจาก checkpoint นี้
@@ -19,12 +22,8 @@
 ## Next
 
 - [ ] **User:** create a free Supabase project and a Vercel project; put `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `PUBLIC_ORIGIN` in Vercel env vars (never in the repo).
-- [ ] Browser side of realtime (Task 4/5): subscribe to `share:<id>` with the Supabase anon key, refetch the snapshot on `share-changed`, ignore older revisions, refetch on reconnect. Server publish on join is done.
 - [ ] Verify the `postgres` driver path against a real Supabase database (`npm run db:migrate`, then the API on Vercel); only PGlite is covered by tests.
-- [ ] Add daily Vercel Cron cleanup of expired shares and their stored images.
-- [ ] Add Creator-only End share: endpoint, `ended` status that rejects joins, realtime broadcast, and button in Creator UI.
 - [ ] Add revision-safe WebSocket broadcasting, reconnect snapshots, heartbeat, and exact 24-hour expiration cleanup (Task 4).
-- [ ] Build Creator/Recipient React UI, QR fallback state, Web Locks bootstrap, and responsive states.
 - [ ] Add Playwright multi-browser/restart tests and bounded demo load test (64 recipients; #65 gets `429 RECIPIENT_LIMIT`).
 - [ ] Add Vercel config (`vercel.json`), setup/demo documentation, and update Project.md with verified results (replaces Docker packaging).
 - [ ] Verify public HTTPS/mobile QR flow on Vercel.

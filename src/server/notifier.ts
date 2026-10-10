@@ -1,14 +1,10 @@
-import type { ShareStatus } from "../shared/contracts.js";
+import { shareChangedEvent, shareChannel, type ShareChangedEvent } from "../shared/contracts.js";
 
-/** Realtime signal only: carries no share content, so recipients refetch their own snapshot over HTTP. */
-export type ShareChangedEvent = { revision: number; status: ShareStatus };
+export type { ShareChangedEvent };
 
 export interface ShareNotifier {
   publish(shareId: string, event: ShareChangedEvent): Promise<void>;
 }
-
-export const shareChannel = (shareId: string) => `share:${shareId}`;
-export const shareChangedEvent = "share-changed";
 
 export class NoopNotifier implements ShareNotifier {
   async publish(): Promise<void> {}
