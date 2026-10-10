@@ -1,4 +1,4 @@
-import type { ApiError, ApiErrorCode, CreateShareResponse, EndShareResponse, RecipientSnapshot } from "../shared/contracts";
+import type { ApiError, ApiErrorCode, CreateShareResponse, EndShareResponse, RecipientSnapshot, VideoUploadTicket } from "../shared/contracts";
 
 export type ClientErrorCode = ApiErrorCode | "NETWORK";
 
@@ -10,6 +10,9 @@ export class ApiFailure extends Error {
 export const maxUploadBytes = 4 * 1024 * 1024;
 export const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp"];
 export const acceptedAudioTypes = ["audio/mpeg", "audio/mp3"];
+/** Videos upload straight to storage, so they may be larger than other files. */
+export const maxVideoUploadBytes = 50 * 1024 * 1024;
+export const acceptedVideoTypes = ["video/mp4"];
 
 let sessionReady: Promise<void> | undefined;
 
@@ -56,6 +59,31 @@ export async function createAudioShare(file: File): Promise<CreateShareResponse>
   return request("/api/shares/audio", { method: "POST", body: form });
 }
 
+/** PUT with upload progress (fetch cannot report it). Same-origin URLs carry the session cookie; storage URLs do not. */
+function putFile(url: string, file: File, onProgress: (fraction: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.withCredentials = url.startsWith("/");
+    xhr.setRequestHeader("content-type", "video/mp4");
+    xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(event.loaded / event.total); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { onProgress(1); resolve(); }
+      else reject(new ApiFailure(xhr.status === 413 ? "UPLOAD_TOO_LARGE" : "INTERNAL_ERROR", xhr.status, "Upload failed"));
+    };
+    xhr.onerror = () => reject(new ApiFailure("NETWORK", 0, "Upload failed"));
+    xhr.send(file);
+  });
+}
+
+/** Video shares: reserve an upload, send the MP4 straight to storage, then let the server index it. */
+export async function createVideoShare(file: File, onProgress: (fraction: number) => void): Promise<CreateShareResponse> {
+  await ensureSession();
+  const slot = await request<VideoUploadTicket>("/api/shares/video/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ size: file.size, type: "video/mp4" }) });
+  await putFile(slot.uploadUrl, file, onProgress);
+  return request("/api/shares/video", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ uploadId: slot.uploadId }) });
+}
+
 export async function joinShare(shareId: string): Promise<RecipientSnapshot> {
   await ensureSession();
   return request(`/api/shares/${encodeURIComponent(shareId)}/join`, { method: "POST" });
@@ -88,7 +116,9 @@ const messages: Partial<Record<ClientErrorCode, string>> = {
   TEXT_TOO_LARGE: "ข้อความยาวเกินไป",
   INVALID_IMAGE: "รองรับเฉพาะภาพ PNG, JPEG หรือ WebP ที่ไม่ใช่ภาพเคลื่อนไหว",
   INVALID_AUDIO: "รองรับเฉพาะไฟล์เสียง MP3",
-  UPLOAD_TOO_LARGE: "ไฟล์ใหญ่เกิน 4 MB",
+  INVALID_VIDEO: "รองรับเฉพาะวิดีโอ MP4 (H.264 แนะนำ) ที่มีภาพ",
+  UPLOAD_NOT_FOUND: "อัปโหลดไม่สำเร็จหรือหมดเวลา ลองใหม่อีกครั้ง",
+  UPLOAD_TOO_LARGE: "ไฟล์ใหญ่เกินกำหนด (วิดีโอ 50 MB, ไฟล์อื่น 4 MB)",
   SHARE_NOT_FOUND: "ไม่พบ share นี้",
   SHARE_EXPIRED: "share นี้หมดอายุแล้ว (เปิดได้ 24 ชั่วโมงหลังสร้าง)",
   SHARE_ENDED: "ผู้สร้างปิด share นี้แล้ว",

@@ -70,3 +70,11 @@
 - Reason: Frames are independently decodable units (~26 ms), so cutting at frame boundaries needs no decoder and runs in plain JavaScript on Vercel. Time segments are the natural audio analogue of the confirmed text rule.
 - Alternatives: Decode and re-encode with ffmpeg (heavy, not on Vercel); interleaving short slices (unlistenable); accepting other formats (needs a decoder per format).
 - Consequences: The first frame of a segment can glitch slightly because MP3 frames may borrow bits from earlier ones (bit reservoir). Mixed-sample-rate or free-format MP3s are cut at the first inconsistent frame or rejected. The live database needed an additive migration (applied 2026-10-10).
+
+## MP4 Video Shares (2026-10-10)
+
+- Context: The user asked for MP4 support, chose time segments (not a spatial grid) and an upload limit of 50 MB.
+- Decision: Browser → Supabase Storage direct upload with a signed upload URL, reserved through a `pending_uploads` row tied to the visitor. The server reads keyframes from the MP4 `stss`/`stts` tables with a small parser (`src/core/mp4.ts`), divides keyframe-to-keyframe GOPs with `partitionRange`, and cuts each range with `ffmpeg-static` stream copy limited by an exact frame count. Cuts are cached in storage per GOP range (`segments/<share>/g<start>-<count>.mp4`), stale ranges are deleted, and recipients get a 10-minute signed download URL via a 302 from the API.
+- Reason: Vercel rejects request and response bodies above 4.5 MB, so large files must bypass the function both ways; signed URLs also give players range requests. Stream copy keeps cuts fast and lossless; the frame-count limit stops B-frame reordering from leaking the next range's keyframe into a cut.
+- Alternatives: Spatial grid (needs re-encoding every block per join); mp4box.js (new 2.x API, only keyframe times were needed); re-encoding to H.264 (too slow on free CPU).
+- Consequences: Split precision follows keyframe spacing. HEVC uploads are accepted but may not play in every browser. Storage holds the original plus roughly one copy of it in cached cuts per video share; each join makes everyone re-download their new segment, which counts against Supabase's free egress (~5 GB/month), so short clips are best for demos. Vitest timeouts were raised to 30 s because integration tests now run ffmpeg and embedded Postgres in parallel.
