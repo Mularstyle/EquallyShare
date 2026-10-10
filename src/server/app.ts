@@ -1,6 +1,5 @@
 import express, { type ErrorRequestHandler, type Express, type Request } from "express";
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
 import multer from "multer";
 import QRCode from "qrcode";
 import { allocateCollage, createTileStream } from "../core/collage.js";
@@ -8,9 +7,12 @@ import type { ApiError, CreateShareResponse, RecipientSnapshot } from "../shared
 import type { ServerConfig } from "./config.js";
 import { IdentityService, type Clock } from "./identity.js";
 import { ImageService } from "./image-service.js";
+import { FileImageStore, SupabaseImageStore, type ImageStore } from "./image-store.js";
+import { NoopNotifier, SupabaseBroadcastNotifier, type ShareNotifier } from "./notifier.js";
 import { ShareError, ShareService } from "./share-service.js";
+import type { Sql } from "./sql.js";
 
-export type AppOptions = { db: DatabaseSync; config: ServerConfig; clock?: Clock };
+export type AppOptions = { sql: Sql; config: ServerConfig; clock?: Clock; imageStore?: ImageStore; notifier?: ShareNotifier };
 const cookieName = "share_session";
 
 function readCookie(request: Request): string | undefined {
@@ -19,11 +21,19 @@ function readCookie(request: Request): string | undefined {
   return item?.slice(cookieName.length + 1);
 }
 
-export function createApp({ db, config, clock = Date.now }: AppOptions): Express {
+export function imageStoreFor(config: ServerConfig): ImageStore {
+  return config.supabaseUrl && config.supabaseServiceRoleKey ? new SupabaseImageStore(config.supabaseUrl, config.supabaseServiceRoleKey, config.storageBucket) : new FileImageStore(config.dataDir);
+}
+
+export function notifierFor(config: ServerConfig): ShareNotifier {
+  return config.supabaseUrl && config.supabaseServiceRoleKey ? new SupabaseBroadcastNotifier(config.supabaseUrl, config.supabaseServiceRoleKey) : new NoopNotifier();
+}
+
+export function createApp({ sql, config, clock = Date.now, imageStore = imageStoreFor(config), notifier = notifierFor(config) }: AppOptions): Express {
   const app = express();
-  const identity = new IdentityService(db, clock, config.sessionTtlHours);
-  const shares = new ShareService(db, clock, config);
-  const images = new ImageService(config.dataDir, config.maxImagePixels, config.maxImageEdge);
+  const identity = new IdentityService(sql, clock, config.sessionTtlHours);
+  const shares = new ShareService(sql, clock, config);
+  const images = new ImageService(imageStore, config.maxImagePixels, config.maxImageEdge);
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes, files: 1, fields: 0, parts: 1 } }).single("image");
   let activeRenders = 0;
   const allowedOrigin = config.publicOrigin;
@@ -38,22 +48,22 @@ export function createApp({ db, config, clock = Date.now }: AppOptions): Express
   app.get("/api/health", (_request, response) => { response.json({ status: "ok" }); });
 
   // Browser clients serialize their first /api/session call across tabs with Web Locks.
-  app.post("/api/session", (request, response) => {
-    const session = identity.ensureSession(readCookie(request));
+  app.post("/api/session", async (request, response) => {
+    const session = await identity.ensureSession(readCookie(request));
     const secure = config.publicOrigin.startsWith("https:") ? "; Secure" : "";
     response.setHeader("Set-Cookie", `${cookieName}=${session.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${config.sessionTtlHours * 3600}${secure}`);
     response.status(204).end();
   });
 
-  function visitor(request: Request): string {
-    const id = identity.findVisitor(readCookie(request));
+  async function visitor(request: Request): Promise<string> {
+    const id = await identity.findVisitor(readCookie(request));
     if (!id) throw new ShareError("UNAUTHENTICATED", 401, "Session required");
     return id;
   }
 
   app.post("/api/shares/text", async (request, response, next) => {
     try {
-      const snapshot = shares.createText(visitor(request), request.body?.text);
+      const snapshot = await shares.createText(await visitor(request), request.body?.text);
       const shareUrl = `${config.publicOrigin}/s/${encodeURIComponent(snapshot.shareId)}`;
       let qrDataUrl: string | null = null;
       try { qrDataUrl = await QRCode.toDataURL(shareUrl); }
@@ -62,13 +72,13 @@ export function createApp({ db, config, clock = Date.now }: AppOptions): Express
     } catch (error) { next(error); }
   });
 
-  app.post("/api/shares/image", (request, _response, next) => {
-    try { visitor(request); next(); }
+  app.post("/api/shares/image", async (request, _response, next) => {
+    try { await visitor(request); next(); }
     catch (error) { next(error); }
   }, upload, async (request, response, next) => {
     let stored: Awaited<ReturnType<ImageService["normalizeAndStore"]>> | undefined;
     try {
-      const visitorId = visitor(request);
+      const visitorId = await visitor(request);
       const file = request.file;
       if (!file) throw new ShareError("INVALID_IMAGE", 415, "Image is required");
       const bytes = file.buffer;
@@ -79,7 +89,7 @@ export function createApp({ db, config, clock = Date.now }: AppOptions): Express
       if (!expected || file.mimetype !== expected) throw new ShareError("INVALID_IMAGE", 415, "Invalid or unsupported image");
       stored = await images.normalizeAndStore(bytes, randomUUID());
       let snapshot: RecipientSnapshot;
-      try { snapshot = shares.createImage(visitorId, stored); }
+      try { snapshot = await shares.createImage(visitorId, stored); }
       catch (error) { await images.deleteSource(stored); throw error; }
       const shareUrl = `${config.publicOrigin}/s/${encodeURIComponent(snapshot.shareId)}`;
       let qrDataUrl: string | null = null;
@@ -89,27 +99,32 @@ export function createApp({ db, config, clock = Date.now }: AppOptions): Express
     } catch (error) { next(error); }
   });
 
-  app.post("/api/shares/:shareId/join", (request, response, next) => {
+  app.post("/api/shares/:shareId/join", async (request, response, next) => {
     try {
-      const snapshot: RecipientSnapshot = shares.join(String(request.params.shareId), visitor(request)).snapshot;
+      const { snapshot, joined } = await shares.join(String(request.params.shareId), await visitor(request));
+      if (joined) {
+        // The join is committed; a failed signal only delays other pages until their next fetch.
+        try { await notifier.publish(snapshot.shareId, { revision: snapshot.revision, status: snapshot.status }); }
+        catch (error) { console.error("Realtime publish failed", error); }
+      }
       response.json(snapshot);
     } catch (error) { next(error); }
   });
 
-  app.get("/api/shares/:shareId/snapshot", (request, response, next) => {
-    try { response.json(shares.getSnapshot(String(request.params.shareId), visitor(request))); }
+  app.get("/api/shares/:shareId/snapshot", async (request, response, next) => {
+    try { response.json(await shares.getSnapshot(String(request.params.shareId), await visitor(request))); }
     catch (error) { next(error); }
   });
 
   app.get("/api/shares/:shareId/collage", async (request, response, next) => {
     response.setHeader("Cache-Control", "private, no-store");
     try {
-      const visitorId = visitor(request);
+      const visitorId = await visitor(request);
       const shareId = String(request.params.shareId);
       const revisionText = request.query.revision;
       if (typeof revisionText !== "string" || !/^[1-9]\d*$/.test(revisionText) || !Number.isSafeInteger(Number(revisionText))) throw new ShareError("STALE_REVISION", 409, "Valid revision required");
       const revision = Number(revisionText);
-      const { image, snapshot } = shares.getImage(shareId, visitorId);
+      const { image, snapshot } = await shares.getImage(shareId, visitorId);
       if (revision !== snapshot.revision) {
         response.status(409).json({ code: "STALE_REVISION", message: "Share revision changed", currentRevision: snapshot.revision, recipientCount: snapshot.recipientCount });
         return;
@@ -126,7 +141,7 @@ export function createApp({ db, config, clock = Date.now }: AppOptions): Express
         const plan = allocateCollage(createTileStream(image.width, image.height, shareId), snapshot.recipientCount, snapshot.recipientNumber);
         png = await images.renderCollage(image, plan);
       } finally { activeRenders--; }
-      const latest = shares.getSnapshot(shareId, visitorId);
+      const latest = await shares.getSnapshot(shareId, visitorId);
       if (latest.revision !== revision) {
         response.status(409).json({ code: "STALE_REVISION", message: "Share revision changed", currentRevision: latest.revision, recipientCount: latest.recipientCount });
         return;

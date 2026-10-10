@@ -31,7 +31,7 @@ async function upload(server: TestServer, cookie: string, bytes: Buffer, mime = 
   return fetch(`${server.origin}/api/shares/image`, { method: "POST", headers: { cookie }, body: form });
 }
 
-function count(server: TestServer): number { return (server.db.prepare("SELECT count(*) AS count FROM shares").get() as { count: number }).count; }
+async function count(server: TestServer): Promise<number> { return (await server.sql.query<{ count: number }>("SELECT count(*) AS count FROM shares"))[0]!.count; }
 
 it("normalizes orientation and renders only uniquely owned pixels", async () => {
   const server = await startTestServer(); servers.push(server);
@@ -87,7 +87,7 @@ it("rejects spoofed MIME, corrupt, animated, oversized and decoded pixel bomb in
     const response = await upload(server, cookie, bytes, mime);
     expect(response.status).toBe(status);
     expect(await response.json()).toMatchObject({ code });
-    expect(count(server)).toBe(0);
+    expect(await count(server)).toBe(0);
   }
   expect(existsSync(join(directory, "originals")) ? readdirSync(join(directory, "originals")) : []).toEqual([]);
 });
@@ -106,10 +106,11 @@ it("cleans orphan source after database creation fails", async () => {
   const directory = mkdtempSync(join(tmpdir(), "equallyshare-images-")); directories.push(directory);
   const server = await startTestServer({ dataDir: directory }); servers.push(server);
   const cookie = await session(server);
-  server.db.exec("CREATE TRIGGER fail_image BEFORE INSERT ON shares WHEN NEW.content_type = 'image' BEGIN SELECT RAISE(ABORT, 'test failure'); END;");
+  await server.sql.query("CREATE FUNCTION fail_image() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test failure'; END $$");
+  await server.sql.query("CREATE TRIGGER fail_image BEFORE INSERT ON shares FOR EACH ROW WHEN (NEW.content_type = 'image') EXECUTE FUNCTION fail_image()");
   const response = await upload(server, cookie, await fixture());
   expect(response.status).toBe(500);
-  expect(count(server)).toBe(0);
+  expect(await count(server)).toBe(0);
   expect(readdirSync(join(directory, "originals"))).toEqual([]);
 });
 
@@ -130,14 +131,14 @@ it("guards membership and current revision without exposing source bytes or path
   const stale = await fetch(`${server.origin}${imageUrl}`, { headers: { cookie: creator } });
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ code: "STALE_REVISION", currentRevision: 2, recipientCount: 2 });
-  for (const url of [`/originals/${id}.rgba`, `/api/shares/${id}/original`, `/api/shares/${id}.rgba`]) {
+  for (const url of [`/originals/${id}.png`, `/api/shares/${id}/original`, `/api/shares/${id}.png`]) {
     expect((await fetch(`${server.origin}${url}`, { headers: { cookie: creator } })).status).toBe(404);
   }
   const responseText = JSON.stringify(created) + JSON.stringify(await (await fetch(`${server.origin}/api/shares/${id}/snapshot`, { headers: { cookie: creator } })).json());
-  expect(responseText).not.toContain(".rgba");
+  expect(responseText).not.toContain(".png");
   expect(responseText).not.toContain(directory);
   expect(responseText).not.toContain(source.toString("base64"));
-  expect(readdirSync(join(directory, "originals"))).toEqual([`${id}.rgba`]);
+  expect(readdirSync(join(directory, "originals"))).toEqual([`${id}.png`]);
 });
 
 it("limits concurrent renders and discards a render after the revision changes", async () => {

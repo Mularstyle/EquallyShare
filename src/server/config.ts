@@ -4,6 +4,12 @@ export type ServerConfig = {
   port: number;
   publicOrigin: string;
   dataDir: string;
+  /** Supabase Postgres connection string; when absent, embedded PGlite under dataDir is used. */
+  databaseUrl: string | undefined;
+  /** Supabase project URL and service-role key; when absent, images stay on local disk and realtime is off. */
+  supabaseUrl: string | undefined;
+  supabaseServiceRoleKey: string | undefined;
+  storageBucket: string;
   sessionTtlHours: number;
   shareTtlHours: number;
   maxTextGraphemes: number;
@@ -24,6 +30,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error(`${name} must be an integer from ${min} to ${max}`);
     return value;
   }
+  function optional(name: string): string | undefined {
+    const value = env[name]?.trim();
+    return value ? value : undefined;
+  }
   const originText = env.PUBLIC_ORIGIN ?? "http://localhost:3000";
   let origin: URL;
   try { origin = new URL(originText); } catch { throw new Error("PUBLIC_ORIGIN must be an absolute HTTP(S) origin"); }
@@ -35,11 +45,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     publicOrigin: origin.origin,
     // Keep the default outside Vite's project root: dev middleware can serve files inside it.
     dataDir: resolve(env.DATA_DIR ?? "../equallyshare-private-data"),
+    databaseUrl: optional("DATABASE_URL"),
+    supabaseUrl: optional("SUPABASE_URL"),
+    supabaseServiceRoleKey: optional("SUPABASE_SERVICE_ROLE_KEY"),
+    storageBucket: env.SUPABASE_STORAGE_BUCKET ?? "share-originals",
     sessionTtlHours: integer("SESSION_TTL_HOURS", 168, 1),
     shareTtlHours: integer("SHARE_TTL_HOURS", 24, 1),
     maxTextGraphemes: integer("MAX_TEXT_GRAPHEMES", 20_000, 1),
     maxRecipients: integer("MAX_RECIPIENTS", 64, 1),
-    maxUploadBytes: integer("MAX_UPLOAD_BYTES", 5_242_880, 1),
+    // Vercel Functions reject request bodies above 4.5 MB.
+    maxUploadBytes: integer("MAX_UPLOAD_BYTES", 4_194_304, 1),
     maxImagePixels: integer("MAX_IMAGE_PIXELS", 12_000_000, 1),
     maxImageEdge: integer("MAX_IMAGE_EDGE", 1024, 1),
     maxConcurrentRenders: integer("MAX_CONCURRENT_RENDERS", 4, 1),

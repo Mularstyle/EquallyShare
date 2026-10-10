@@ -1,25 +1,18 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, join, resolve, sep } from "node:path";
 import sharp from "sharp";
 import type { CollagePlan } from "../core/collage.js";
+import type { ImageStore } from "./image-store.js";
 import { ShareError } from "./share-service.js";
 
 export type StoredImage = { path: string; width: number; height: number; totalPixels: number };
 
+// Decoded originals are reused across renders on a warm instance so each collage request
+// does not re-download the source from storage (free-plan egress is limited).
+const cacheLimit = 6;
+
 export class ImageService {
-  private readonly originalsDir: string;
+  private readonly decoded = new Map<string, Buffer>();
 
-  constructor(dataDir: string, private readonly maxPixels = 12_000_000, private readonly maxEdge = 1024) {
-    this.originalsDir = resolve(dataDir, "originals");
-  }
-
-  private sourcePath(image: StoredImage): string {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.rgba$/i.test(image.path) || basename(image.path) !== image.path) throw new Error("Invalid image filename");
-    const full = resolve(this.originalsDir, image.path);
-    if (!full.startsWith(this.originalsDir + sep)) throw new Error("Invalid image path");
-    return full;
-  }
+  constructor(private readonly store: ImageStore, private readonly maxPixels = 12_000_000, private readonly maxEdge = 1024) {}
 
   async normalizeAndStore(input: Buffer, shareId: string): Promise<StoredImage> {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shareId)) throw new Error("Invalid share ID");
@@ -38,24 +31,16 @@ export class ImageService {
     } catch {
       throw new ShareError("INVALID_IMAGE", 415, "Invalid or unsupported image");
     }
-    const image: StoredImage = { path: `${shareId}.rgba`, width, height, totalPixels: width * height };
-    const target = this.sourcePath(image);
-    const temporary = join(this.originalsDir, `.${shareId}.${randomUUID()}.tmp`);
-    await mkdir(this.originalsDir, { recursive: true });
-    try {
-      await writeFile(temporary, data, { flag: "wx", mode: 0o600 });
-      await rename(temporary, target);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
+    const image: StoredImage = { path: `${shareId}.png`, width, height, totalPixels: width * height };
+    // Lossless PNG keeps exact source pixels while storing far fewer bytes than raw RGBA.
+    await this.store.put(image.path, await sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer());
+    this.remember(image.path, data);
     return image;
   }
 
   async renderCollage(image: StoredImage, plan: CollagePlan): Promise<Buffer> {
     if (plan.pixelCount === 0 || plan.canvasWidth === 0 || plan.canvasHeight === 0) throw new Error("Cannot render empty collage");
-    const source = await readFile(this.sourcePath(image));
-    if (source.length !== image.width * image.height * 4) throw new Error("Corrupt stored image");
+    const source = await this.source(image);
     const output = Buffer.alloc(plan.canvasWidth * plan.canvasHeight * 4);
     for (const fragment of plan.fragments) {
       for (let row = 0; row < fragment.height; row++) {
@@ -67,5 +52,23 @@ export class ImageService {
     return sharp(output, { raw: { width: plan.canvasWidth, height: plan.canvasHeight, channels: 4 } }).png().toBuffer();
   }
 
-  async deleteSource(image: StoredImage): Promise<void> { await rm(this.sourcePath(image), { force: true }); }
+  async deleteSource(image: StoredImage): Promise<void> {
+    this.decoded.delete(image.path);
+    await this.store.delete(image.path);
+  }
+
+  private async source(image: StoredImage): Promise<Buffer> {
+    const cached = this.decoded.get(image.path);
+    if (cached) return cached;
+    const { data, info } = await sharp(await this.store.get(image.path)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    if (info.width !== image.width || info.height !== image.height || data.length !== image.width * image.height * 4) throw new Error("Corrupt stored image");
+    this.remember(image.path, data);
+    return data;
+  }
+
+  private remember(path: string, data: Buffer): void {
+    this.decoded.delete(path);
+    this.decoded.set(path, data);
+    while (this.decoded.size > cacheLimit) this.decoded.delete(this.decoded.keys().next().value!);
+  }
 }

@@ -259,9 +259,13 @@ Status: **Tasks 1–3 complete and reviewed; realtime/UI/production work remains
 - Task 3: deterministic image collage, image validation/storage/rendering, recipient-only collage route และ original-image isolation
 - Verification ผ่าน: `npm test` 31 tests, `npm run typecheck`, `npm run build`; Task 3 targeted storage/image review ผ่าน 8/8
 
+- Backend port (2026-10-10): Postgres ผ่าน `Sql` interface (Supabase ใน production, PGlite ใน tests/dev), ภาพต้นฉบับเป็น PNG ใน private Supabase Storage bucket, RLS ทุกตาราง, realtime signal `{ revision, status }` เมื่อมีผู้รับใหม่, Vercel entry `api/index.ts` + `vercel.json`, upload 4 MiB; ผ่าน 34 tests, typecheck และ server build วิธีตั้งค่าอยู่ใน `docs/setup.md`
+
 ### Not Implemented or Verified
 
-- Revision-safe WebSocket broadcasting, reconnect snapshots, heartbeat และ exact 24-hour cleanup
+- ฝั่ง browser ของ realtime (subscribe Supabase channel, refetch snapshot, reconnect), End share และ daily cleanup ของ share ที่หมดอายุ
+- `postgres` driver กับ Supabase จริงยังไม่ได้ทดสอบ (tests ใช้ PGlite)
+- `vite build` ยังล้มเหลวเพราะยังไม่มี `src/web/main.tsx` (Task 5); branch `frontend` เป็น prototype เก่าที่ไม่ได้ต่อกับ API นี้
 - React Creator/Recipient UI, Web Locks bootstrap, responsive/loading/error states และ QR fallback display
 - Playwright multi-browser/restart checks และ bounded demo load test
 - Production static serving, Docker packaging, setup/demo documentation และ public HTTPS/mobile flow

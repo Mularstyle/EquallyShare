@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import type { DatabaseSync } from "node:sqlite";
+import type { Sql } from "../../src/server/sql.js";
 import type { CreateShareResponse, RecipientSnapshot } from "../../src/shared/contracts.js";
 import { startTestServer, type TestServer } from "./test-server.js";
 
@@ -32,8 +32,11 @@ async function joinShare(origin: string, cookie: string, shareId: string) {
   expect(response.status).toBe(200);
   return response.json() as Promise<RecipientSnapshot>;
 }
-function rows(db: DatabaseSync, table: "shares" | "recipients" | "sessions") {
-  return (db.prepare(`SELECT count(*) AS count FROM ${table}`).get() as { count: number }).count;
+async function rows(sql: Sql, table: "shares" | "recipients" | "sessions") {
+  return (await sql.query<{ count: number }>(`SELECT count(*) AS count FROM ${table}`))[0]!.count;
+}
+async function revision(sql: Sql, id: string) {
+  return (await sql.query<{ revision: number }>("SELECT revision FROM shares WHERE id = $1", [id]))[0]!.revision;
 }
 
 it("creates creator as recipient one at revision one", async () => {
@@ -46,7 +49,7 @@ it("creates creator as recipient one at revision one", async () => {
   expect(body.shareUrl).toBe(`http://localhost:3000/s/${body.snapshot.shareId}`);
   expect(body.qrDataUrl).toMatch(/^data:image\/png;base64,/);
   expect(body.qrStatus).toBe("ready");
-  expect(rows(current.db, "recipients")).toBe(1);
+  expect(await rows(current.sql, "recipients")).toBe(1);
 });
 
 it("joins new visitors in stable order and recomputes canonical text", async () => {
@@ -74,8 +77,8 @@ it("refresh, reconnect and repeated join keep the same count and revision", asyn
   expect(await session(current.origin, cookie)).toBe(cookie);
   const snapshots = await Promise.all([joinShare(current.origin, cookie, id), joinShare(current.origin, cookie, id)]);
   expect(snapshots.every((s) => s.recipientCount === 1 && s.revision === 1)).toBe(true);
-  expect(rows(current.db, "recipients")).toBe(1);
-  expect(rows(current.db, "sessions")).toBe(1);
+  expect(await rows(current.sql, "recipients")).toBe(1);
+  expect(await rows(current.sql, "sessions")).toBe(1);
 });
 
 it("reuses the server session cookie idempotently", async () => {
@@ -92,8 +95,8 @@ it("reuses the server session cookie idempotently", async () => {
   const [left, right] = await Promise.all([joinShare(current.origin, cookie, id), joinShare(current.origin, cookie, id)]);
   expect([left.recipientNumber, right.recipientNumber]).toEqual([1, 1]);
   expect([left.recipientCount, right.recipientCount, left.revision, right.revision]).toEqual([1, 1, 1, 1]);
-  expect(rows(current.db, "recipients")).toBe(1);
-  expect(rows(current.db, "sessions")).toBe(1);
+  expect(await rows(current.sql, "recipients")).toBe(1);
+  expect(await rows(current.sql, "sessions")).toBe(1);
 });
 
 it("serializes different concurrent visitors without duplicate join order", async () => {
@@ -103,8 +106,8 @@ it("serializes different concurrent visitors without duplicate join order", asyn
   const visitors = await Promise.all(Array.from({ length: 12 }, () => session(current.origin)));
   const snapshots = await Promise.all(visitors.map((visitor) => joinShare(current.origin, visitor, id)));
   expect(new Set(snapshots.map((item) => item.recipientNumber)).size).toBe(12);
-  expect(rows(current.db, "recipients")).toBe(13);
-  expect((current.db.prepare("SELECT revision FROM shares WHERE id = ?").get(id) as { revision: number }).revision).toBe(13);
+  expect(await rows(current.sql, "recipients")).toBe(13);
+  expect(await revision(current.sql, id)).toBe(13);
 });
 
 it("persists active share, session and order after database reopen", async () => {
@@ -133,7 +136,7 @@ it("rejects empty text and text above configured grapheme limit", async () => {
   const response = await create(current.origin, cookie, "A".repeat(20_001));
   expect(response.status).toBe(413);
   expect(await response.json()).toMatchObject({ code: "TEXT_TOO_LARGE" });
-  expect(rows(current.db, "shares")).toBe(0);
+  expect(await rows(current.sql, "shares")).toBe(0);
 });
 
 it("expires at the exact 24-hour boundary without extending on join", async () => {
@@ -154,7 +157,7 @@ it("expires at the exact 24-hour boundary without extending on join", async () =
   expect(await snapshot.json()).toMatchObject({ code: "SHARE_EXPIRED" });
 });
 
-it("requires membership for snapshot and keeps tokens and QR out of SQLite", async () => {
+it("requires membership for snapshot and keeps tokens and QR out of the database", async () => {
   const current = await server();
   const creator = await session(current.origin);
   const body = await (await create(current.origin, creator, "ABCDEFGH")).json();
@@ -163,12 +166,13 @@ it("requires membership for snapshot and keeps tokens and QR out of SQLite", asy
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({ code: "NOT_A_RECIPIENT" });
   const token = creator.split("=")[1]!;
-  const sessionRows = current.db.prepare("SELECT * FROM sessions").all();
+  const sessionRows = await current.sql.query("SELECT * FROM sessions");
   expect(JSON.stringify(sessionRows)).not.toContain(token);
-  const shareRows = current.db.prepare("SELECT * FROM shares").all();
+  const shareRows = await current.sql.query("SELECT * FROM shares");
   expect(JSON.stringify(shareRows)).not.toContain(body.qrDataUrl);
   expect(JSON.stringify(shareRows)).not.toContain("image/png");
-  expect(current.db.prepare("PRAGMA foreign_keys").get()).toMatchObject({ foreign_keys: 1 });
+  const foreignKeys = await current.sql.query("SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'recipients' AND constraint_type = 'FOREIGN KEY'");
+  expect(foreignKeys).toHaveLength(1);
 });
 
 it("returns a usable creation response when QR generation fails after commit", async () => {
@@ -182,7 +186,7 @@ it("returns a usable creation response when QR generation fails after commit", a
   expect(body).toMatchObject({ qrDataUrl: null, qrStatus: "unavailable", snapshot: { recipientNumber: 1, recipientCount: 1 } });
   expect(body.shareUrl).toBe(`${longOrigin}/s/${body.snapshot.shareId}`);
   expect(await joinShare(current.origin, cookie, body.snapshot.shareId)).toMatchObject({ revision: 1, recipientCount: 1 });
-  expect(rows(current.db, "shares")).toBe(1);
+  expect(await rows(current.sql, "shares")).toBe(1);
 });
 
 it("allows configured Origin and rejects foreign Origin without mutation", async () => {
@@ -191,14 +195,14 @@ it("allows configured Origin and rejects foreign Origin without mutation", async
   const rejected = await fetch(`${current.origin}/api/session`, { method: "POST", headers: { origin: "https://foreign.example" } });
   expect(rejected.status).toBe(403);
   expect(await rejected.json()).toMatchObject({ code: "ORIGIN_NOT_ALLOWED" });
-  expect(rows(current.db, "sessions")).toBe(0);
+  expect(await rows(current.sql, "sessions")).toBe(0);
   const response = await fetch(`${current.origin}/api/session`, { method: "POST", headers: { origin: allowed } });
   expect(response.status).toBe(204);
   const cookie = response.headers.get("set-cookie")!.split(";")[0]!;
   const badCreate = await fetch(`${current.origin}/api/shares/text`, { method: "POST", headers: { origin: "https://foreign.example", cookie, "content-type": "application/json" }, body: JSON.stringify({ text: "ABC" }) });
   expect(badCreate.status).toBe(403);
   expect(await badCreate.json()).toMatchObject({ code: "ORIGIN_NOT_ALLOWED" });
-  expect(rows(current.db, "shares")).toBe(0);
+  expect(await rows(current.sql, "shares")).toBe(0);
   const goodCreate = await fetch(`${current.origin}/api/shares/text`, { method: "POST", headers: { origin: allowed, cookie, "content-type": "application/json" }, body: JSON.stringify({ text: "ABC" }) });
   expect(goodCreate.status).toBe(201);
 });
@@ -236,6 +240,34 @@ it("maps missing and invalid cookies, unknown shares, and recipient limit", asyn
   const limited = await fetch(`${current.origin}/api/shares/${id}/join`, { method: "POST", headers: { cookie: visitor } });
   expect(limited.status).toBe(429);
   expect(await limited.json()).toMatchObject({ code: "RECIPIENT_LIMIT" });
-  expect(rows(current.db, "recipients")).toBe(1);
-  expect((current.db.prepare("SELECT revision FROM shares WHERE id = ?").get(id) as { revision: number }).revision).toBe(1);
+  expect(await rows(current.sql, "recipients")).toBe(1);
+  expect(await revision(current.sql, id)).toBe(1);
+});
+
+it("publishes a content-free realtime signal only when a new recipient joins", async () => {
+  const current = await server();
+  const creator = await session(current.origin);
+  const id = (await (await create(current.origin, creator, "ABCDEFGH")).json() as CreateShareResponse).snapshot.shareId;
+  await joinShare(current.origin, creator, id);
+  expect(current.events).toEqual([]);
+  const visitor = await session(current.origin);
+  await joinShare(current.origin, visitor, id);
+  await joinShare(current.origin, visitor, id);
+  expect(current.events).toEqual([{ shareId: id, event: { revision: 2, status: "active" } }]);
+});
+
+it("keeps a committed join when the realtime signal fails", async () => {
+  const current = await startTestServer({ notifier: { async publish() { throw new Error("realtime down"); } } });
+  servers.push(current);
+  const creator = await session(current.origin);
+  const id = (await (await create(current.origin, creator, "ABCDEFGH")).json() as CreateShareResponse).snapshot.shareId;
+  const visitor = await session(current.origin);
+  expect(await joinShare(current.origin, visitor, id)).toMatchObject({ recipientNumber: 2, recipientCount: 2, revision: 2 });
+  expect(await rows(current.sql, "recipients")).toBe(2);
+});
+
+it("enables row level security on every table so the public Supabase key reads nothing", async () => {
+  const current = await server();
+  const tables = await current.sql.query<{ relname: string; relrowsecurity: boolean }>("SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('sessions', 'shares', 'recipients') ORDER BY relname");
+  expect(tables).toEqual([{ relname: "recipients", relrowsecurity: true }, { relname: "sessions", relrowsecurity: true }, { relname: "shares", relrowsecurity: true }]);
 });

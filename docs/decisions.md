@@ -46,3 +46,11 @@
 - Reason: Supabase's free plan covers database, file storage and realtime in one project (about 500 MB DB, 1 GB storage, 200 concurrent realtime connections), which is enough for a 64-person demo, and Vercel Hobby is free.
 - Alternatives: Neon/Upstash + Vercel Blob + Pusher/Ably (more services to wire up); polling instead of Realtime; Vercel frontend + separate Node host (rejected by user).
 - Consequences: `node:sqlite`, `DATA_DIR` and the Docker/persistent-volume tasks are replaced. Free Supabase projects pause after 7 days without activity; restore the project from the dashboard before a demo. Free plans have no backups, which is acceptable for 24-hour demo shares. Secrets (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, anon key) live in Vercel environment variables, never in the repo. Free-tier numbers come from third-party summaries; confirm them on supabase.com/pricing when creating the project.
+
+## Backend Port Details (2026-10-10)
+
+- Context: Implementing the Vercel + Supabase decision while keeping the Task 1–3 tests meaningful without a cloud account.
+- Decision: A small async `Sql` interface with two adapters: `postgres` (Supabase, `prepare: false` for the transaction pooler) and embedded PGlite (tests and local dev, on disk under `DATA_DIR` or in memory). `ImageStore` has Supabase Storage and local-disk implementations chosen by config. Originals are stored as lossless PNG, and decoded originals are cached in function memory (6 images). Row level security is enabled on all tables with no policies.
+- Reason: PGlite is real Postgres, so row locks, constraints and triggers behave as in production and tests need no server. PNG plus the cache keeps storage egress small: a 64-person image demo re-renders collages roughly 2,000 times, which at 4 MB of raw RGBA per download would exceed the free plan's monthly egress. RLS stops the browser-visible anon key from reading tables through Supabase's auto-generated REST API.
+- Alternatives: A Docker Postgres for tests; storing raw RGBA; supabase-js queries instead of SQL.
+- Consequences: Tests do not exercise the `postgres` driver itself; verify it once against Supabase. The render-concurrency limit and image cache are per function instance.
