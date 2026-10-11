@@ -1,75 +1,77 @@
+**English** | [ภาษาไทย (Thai version)](README.th.md)
+
 <p align="center">
-  <img src="docs/images/logo.png" alt="EquallyShare — Share แปลว่าหาร" width="480">
+  <img src="docs/images/logo.png" alt="EquallyShare — Share means divide" width="480">
 </p>
 
-# EquallyShare — Share แปลว่าหาร
+# EquallyShare — Share Means Divide
 
-เว็บแชร์ข้อมูลที่ตีความคำว่า **Share** แบบตรงตัว: เอาข้อมูลมา **หาร** ตามจำนวนคนรับ ยิ่งมีคนเปิดลิงก์มาก แต่ละคนก็ยิ่งได้ข้อมูลน้อยลง!
+A sharing website that takes **sharing** literally: divide your content among everyone who opens the link. The more people join, the less each person gets!
 
-โปรเจกต์สำหรับ **Stupid Hackathon 2026** มาในหน้าตา Windows XP รองรับข้อความ ภาพ เสียง MP3 วิดีโอ MP4 และ PDF
+Built for **Stupid Hackathon 2026**, with a Windows XP-inspired interface. Supports text, images, MP3 audio, MP4 video, and PDFs.
 
-**[ลองเล่นบนเว็บ →](https://equally-share.vercel.app/)**
+**[Try it →](https://equally-share.vercel.app/)**
 
-## มันหารยังไง?
+## How does it work?
 
-สมมติคุณแชร์ข้อความ `ABCDEFGH`
+Suppose you share `ABCDEFGH`:
 
-| จำนวนผู้รับ | สิ่งที่แต่ละคนได้รับ |
+| Recipients | What each person receives |
 | --- | --- |
-| 1 คน | `ABCDEFGH` |
-| 2 คน | `ABCD` · `EFGH` |
-| 4 คน | `AB` · `CD` · `EF` · `GH` |
+| 1 | `ABCDEFGH` |
+| 2 | `ABCD` · `EFGH` |
+| 4 | `AB` · `CD` · `EF` · `GH` |
 
-ทุกครั้งที่มีผู้รับใหม่ ข้อมูลต้นฉบับจะถูกแบ่งใหม่ และหน้าของผู้รับเดิมจะอัปเดตให้อัตโนมัติ คนสร้างก็นับเป็นผู้รับคนแรกด้วย
+Whenever someone new joins, the original content is divided again. Existing recipients see their portions update automatically. The creator counts as recipient #1.
 
-## วิธีใช้
+## How to use
 
-### 1. เลือกข้อมูลที่อยากแชร์
+### 1. Choose your content
 
-เลือกประเภท **TEXT, IMAGE, MP3, MP4 หรือ PDF** แล้วพิมพ์ข้อความหรืออัปโหลดไฟล์ จากนั้นกด **สร้าง Share**
+Select **TEXT, IMAGE, MP3, MP4, or PDF**, then enter your text or upload a file. Click **สร้าง Share** (Create Share).
 
-![หน้าเลือกข้อมูลและสร้าง Share](docs/images/eqs1.png)
+![Choose content and create a share](docs/images/eqs1.png)
 
-### 2. ส่งลิงก์หรือ QR ให้คนอื่น
+### 2. Pass it on
 
-หลังสร้าง คุณจะเห็นส่วนข้อมูลของตัวเอง พร้อม QR code และปุ่ม **COPY URL** ส่งลิงก์ให้เพื่อน หรือให้เพื่อนสแกน QR เพื่อเข้าร่วมได้เลย ไม่ต้องสมัครบัญชี
+Your share page shows your portion, a QR code, and a **COPY URL** button. Send the link to friends or let them scan the QR code to join. No account needed.
 
-![หน้าผู้สร้าง พร้อมส่วนข้อมูล ลิงก์ และ QR code](docs/images/eqs2.png)
+![Creator's portion, share link, and QR code](docs/images/eqs2.png)
 
-### 3. ดูข้อมูลถูกหารไปเรื่อย ๆ
+### 3. Watch your portion shrink
 
-เมื่อคนใหม่เข้ามา ส่วนของทุกคนจะเปลี่ยนตามจำนวนผู้รับ เช่น ภาพหนึ่งภาพถูกแบ่งเป็นพื้นที่คนละส่วน ทุกคนได้รับเฉพาะส่วนของตัวเอง
+As more people join, everyone's portion changes. An image, for example, is split into separate regions, and each recipient receives only their own region.
 
-![ตัวอย่างภาพต้นฉบับถูกแบ่งให้ผู้รับสามคน](docs/images/image-sharing.png)
+![An original image divided among three recipients](docs/images/image-sharing.png)
 
-## ข้อมูลแต่ละประเภทแบ่งแบบไหน?
+## What gets divided?
 
-| ประเภท | วิธีแบ่ง |
+| Content | How it is split |
 | --- | --- |
-| ข้อความ | แบ่งเป็นช่วงข้อความตามลำดับ โดยไม่ตัดกลาง emoji หรือกลุ่มอักขระ |
-| ภาพ | แบ่งเป็นช่องสี่เหลี่ยมของภาพต้นฉบับ |
-| MP3 | แบ่งเป็นช่วงเสียงตามลำดับ |
-| MP4 | แบ่งเป็นช่วงวิดีโอตามจุด keyframe |
-| PDF | แบ่งเป็นช่วงหน้า แต่ละคนได้รับเฉพาะหน้าของตัวเอง |
+| Text | Consecutive sections, preserving whole emoji and character clusters |
+| Images | Rectangular regions of the original image |
+| MP3 | Consecutive audio segments |
+| MP4 | Consecutive video segments cut at keyframes |
+| PDF | Consecutive page ranges, with each recipient receiving only their pages |
 
-## กติกาเล็ก ๆ
+## A few ground rules
 
-- รองรับสูงสุด **64 ผู้รับต่อ Share** ตามค่าเริ่มต้น
-- จำนวนผู้รับนับสะสม ปิดแท็บแล้วส่วนแบ่งไม่คืน
-- เปิดซ้ำใน browser เดิมยังเป็นผู้รับคนเดิม
-- ถ้าข้อมูลไม่พอแบ่ง บางคนอาจได้รับส่วนว่าง เช่น **“คุณได้รับข้อมูล 0 ตัวอักษร”**
-- Share หมดอายุใน **24 ชั่วโมง** หรือผู้สร้างกด **End share** เพื่อจบก่อน
-- ต้นฉบับแก้ไม่ได้หลังสร้าง ถ้าจะเปลี่ยนข้อมูลให้สร้าง Share ใหม่
+- Up to **64 recipients per share** by default.
+- The recipient count is cumulative. Closing a tab does not give anyone their portion back.
+- Reopening a share in the same browser keeps you as the same recipient.
+- If there is not enough content to go around, some recipients get an empty portion. For text, the page displays **“คุณได้รับข้อมูล 0 ตัวอักษร”** (You received 0 characters).
+- Shares expire after **24 hours**. The creator can also click **End share** to finish earlier.
+- Content cannot be edited after creation. Create a new share to change it.
 
-## รันในเครื่อง
+## Run locally
 
-ใช้ **Node.js 22** และ npm
+Requires **Node.js 22** and npm.
 
 ```sh
 npm install
 npm run dev
 ```
 
-เปิด [http://localhost:3000](http://localhost:3000) เพื่อใช้งาน ดูการตั้งค่า Supabase, Vercel และขนาดไฟล์ที่รองรับได้ใน [คู่มือติดตั้ง](docs/setup.md)
+Open [http://localhost:3000](http://localhost:3000). See the [setup guide](docs/setup.md) for Supabase, Vercel, and supported file sizes.
 
-สร้างด้วย React, TypeScript, Vite และ Express พร้อม Supabase สำหรับฐานข้อมูล การเก็บไฟล์ และการอัปเดตแบบ realtime
+Built with React, TypeScript, Vite, and Express, using Supabase for the database, file storage, and realtime updates.
