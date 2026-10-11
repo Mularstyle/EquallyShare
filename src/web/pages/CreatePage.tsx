@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, Scissors, Users } from "lucide-react";
 import { createAudioShare, createImageShare, createPdfShare, createTextShare, createVideoShare, errorMessage } from "../api";
 import ContentInput, { type ContentDraft } from "../components/ContentInput";
 import GenerateButton from "../components/GenerateButton";
-import ShatterTransition from "../components/ShatterTransition";
 import { countUnits, maxTextUnits } from "../components/TextInput";
 import XPWindow from "../components/XPWindow";
 
@@ -13,7 +12,7 @@ interface CreatePageProps {
   onMinimize: () => void;
 }
 
-type State = "idle" | "creating" | "shattering";
+type State = "idle" | "creating";
 
 function HowItWorks() {
   const rows = [
@@ -52,7 +51,6 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
   const [state, setState] = useState<State>("idle");
   const [content, setContent] = useState<ContentDraft>({ type: "text", text: "" });
   const [error, setError] = useState("");
-  const [createdId, setCreatedId] = useState<string>();
   const [progress, setProgress] = useState<number>();
 
   const validate = (): string | undefined => {
@@ -76,8 +74,8 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
         : content.type === "audio" ? await createAudioShare(content.file!)
         : content.type === "pdf" ? await createPdfShare(content.file!, setProgress)
         : await createVideoShare(content.file!, setProgress);
-      setCreatedId(response.snapshot.shareId);
-      setState("shattering");
+      // Stays "creating" while App plays the slide transition and opens the share.
+      onCreated(response.snapshot.shareId);
     } catch (failure) {
       setError(errorMessage(failure));
       setState("idle");
@@ -93,7 +91,6 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const finish = useCallback(() => { if (createdId) onCreated(createdId); }, [createdId, onCreated]);
   const busy = state !== "idle";
 
   return (
@@ -118,7 +115,7 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
 
             <div className="border-t-2 border-gray-400 px-4 py-2 text-sm text-gray-700 flex items-center gap-2" style={{ background: "#ECE9D8" }}>
               <div className={`w-2 h-2 rounded-full ${state === "idle" ? (error ? "bg-red-500" : "bg-green-500") : "bg-yellow-500 animate-pulse"}`} />
-              <span>{state === "idle" ? (error ? "Error Occurred" : "System Ready") : state === "creating" ? (progress === undefined ? "Uploading..." : progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : content.type === "pdf" ? "Reading pages..." : "Indexing keyframes...") : "Dividing..."}</span>
+              <span>{state === "idle" ? (error ? "Error Occurred" : "System Ready") : progress === undefined ? "Uploading..." : progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : content.type === "pdf" ? "Reading pages..." : "Indexing keyframes..."}</span>
               <div className="flex-1" />
               <span className="text-xs opacity-60">EquallyShare v1.0</span>
             </div>
@@ -126,7 +123,6 @@ export default function CreatePage({ onCreated, onMinimize }: CreatePageProps) {
         </XPWindow>
       </motion.div>
 
-      <AnimatePresence>{state === "shattering" && <ShatterTransition onComplete={finish} />}</AnimatePresence>
     </>
   );
 }

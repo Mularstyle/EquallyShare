@@ -74,7 +74,6 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
             isDragging ? "border-blue-500 bg-blue-50" : "border-gray-400 bg-white hover:border-blue-400 hover:bg-blue-50/50"
           } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          <Upload size={48} className={isDragging ? "text-blue-500" : "text-gray-400"} />
           <div className="text-center">
             <p className="text-lg font-semibold text-gray-700">{isDragging ? "วางไฟล์ที่นี่" : text.drop}</p>
             <p className="text-sm text-gray-500 mt-1">{text.hint}</p>

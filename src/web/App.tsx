@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import AnimatedBackground from "./components/AnimatedBackground";
+import SlideTransition, { type SlidePhase } from "./components/SlideTransition";
 import Taskbar from "./components/Taskbar";
 import CreatePage from "./pages/CreatePage";
 import SharePage from "./pages/SharePage";
@@ -32,6 +33,7 @@ export default function App() {
   const [path, setPath] = useState(() => window.location.pathname);
   const [minimized, setMinimized] = useState(false);
   const [shareTitle, setShareTitle] = useState("EquallyShare — Share");
+  const [slide, setSlide] = useState<{ phase: SlidePhase; target: string }>();
   useCursorTrail();
 
   useEffect(() => {
@@ -48,7 +50,14 @@ export default function App() {
 
   const shareId = shareIdFrom(path);
   const goHome = useCallback(() => navigate("/"), [navigate]);
-  const openShare = useCallback((id: string) => navigate(`/s/${encodeURIComponent(id)}`), [navigate]);
+  // A new share opens behind a PowerPoint-style slide: cover, switch page, reveal.
+  const openShare = useCallback((id: string) => setSlide({ phase: "cover", target: `/s/${encodeURIComponent(id)}` }), []);
+  const slideDone = useCallback(() => {
+    if (slide?.phase === "cover") {
+      navigate(slide.target);
+      setSlide({ phase: "reveal", target: slide.target });
+    } else setSlide(undefined);
+  }, [slide, navigate]);
   const minimize = useCallback(() => setMinimized(true), []);
 
   return (
@@ -63,6 +72,8 @@ export default function App() {
             : <CreatePage key="create" onCreated={openShare} onMinimize={minimize} />}
         </AnimatePresence>
       </div>
+
+      {slide && <SlideTransition phase={slide.phase} onDone={slideDone} />}
 
       <AnimatePresence>
         {minimized && <Taskbar label={shareId ? shareTitle : "EquallyShare — Share แปลว่าหาร"} onRestore={() => setMinimized(false)} />}

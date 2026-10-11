@@ -53,10 +53,11 @@ body {
 
   /* The Windows XP "start" button: glossy green, rounded on the right. */
   .xp-start-button {
-    @apply relative inline-flex items-center gap-3 pl-5 pr-10 py-3 text-white font-bold italic select-none;
-    font-family: 'Trebuchet MS', Tahoma, 'Leelawadee UI', sans-serif;
-    font-size: 1.6rem;
-    letter-spacing: 0.01em;
+    @apply relative inline-flex items-center gap-3 pl-5 pr-10 py-3 text-white font-bold select-none;
+    /* Tahoma Bold, upright: Trebuchet MS has no Thai glyphs, so its italic fell back to a slanted, squashed substitute. */
+    font-family: Tahoma, 'Leelawadee UI', 'Noto Sans Thai', sans-serif;
+    font-size: 1.5rem;
+    letter-spacing: 0.02em;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.55);
     border-radius: 6px 28px 28px 6px;
     border: 1px solid #1f6b1c;
