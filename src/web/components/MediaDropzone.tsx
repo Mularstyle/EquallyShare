@@ -1,5 +1,4 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
-import { motion } from "framer-motion";
 import { BookOpen, Film, Image as ImageIcon, Music, Upload, X } from "lucide-react";
 import { acceptedAudioTypes, acceptedImageTypes, acceptedPdfTypes, acceptedVideoTypes, maxDirectUploadBytes, maxUploadBytes } from "../api";
 
@@ -30,7 +29,7 @@ function accepts(kind: MediaKind, file: File): boolean {
   return acceptedAudioTypes.includes(file.type) || (!file.type.startsWith("image/") && /\.mp3$/i.test(file.name));
 }
 
-/** One original file per share (an image or an MP3) up to 4 MB. The server re-validates everything. */
+/** One original file per share (image, MP3, MP4 or PDF). Static on purpose: no animation. The server re-validates everything. */
 export default function MediaDropzone({ kind, file, onChange, onReject, disabled }: MediaDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState<string>();
@@ -65,19 +64,17 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
   const Icon = kind === "image" ? ImageIcon : kind === "video" ? Film : kind === "pdf" ? BookOpen : Music;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full flex flex-col">
+    <div className="h-full flex flex-col">
       {!file ? (
         <div
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); if (!disabled) setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
-          className={`flex-1 min-h-[260px] border-4 border-dashed flex flex-col items-center justify-center gap-4 p-4 transition-all ${
+          className={`flex-1 min-h-[260px] border-4 border-dashed flex flex-col items-center justify-center gap-4 p-4 ${
             isDragging ? "border-blue-500 bg-blue-50" : "border-gray-400 bg-white hover:border-blue-400 hover:bg-blue-50/50"
           } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          <motion.div animate={{ y: isDragging ? -10 : [0, -10, 0], scale: isDragging ? 1.1 : 1 }} transition={{ y: { duration: 2, repeat: Infinity } }}>
-            <Upload size={48} className={isDragging ? "text-blue-500" : "text-gray-400"} />
-          </motion.div>
+          <Upload size={48} className={isDragging ? "text-blue-500" : "text-gray-400"} />
           <div className="text-center">
             <p className="text-lg font-semibold text-gray-700">{isDragging ? "วางไฟล์ที่นี่" : text.drop}</p>
             <p className="text-sm text-gray-500 mt-1">{text.hint}</p>
@@ -102,12 +99,12 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
               <p className="font-medium text-sm text-gray-800 truncate">{file.name}</p>
               <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
             </div>
-            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => onChange(undefined)} className="p-1 hover:bg-red-100" disabled={disabled} aria-label="Remove file">
+            <button type="button" onClick={() => onChange(undefined)} className="p-1 hover:bg-red-100" disabled={disabled} aria-label="Remove file">
               <X size={16} className="text-red-500" />
-            </motion.button>
+            </button>
           </div>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

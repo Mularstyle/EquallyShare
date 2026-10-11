@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { BookOpen, Film, FileText, Image as ImageIcon, Music } from "lucide-react";
 import MediaDropzone from "./MediaDropzone";
 import TextInput from "./TextInput";
@@ -62,13 +62,12 @@ export default function ContentInput({ content, onChange, onReject, disabled }: 
       </div>
 
       <div className="xp-panel p-4 min-h-[300px]">
-        <AnimatePresence mode="wait">
-          {content.type === "text" ? (
-            <TextInput key="text" value={content.text} onChange={(text) => onChange({ type: "text", text })} disabled={disabled} />
-          ) : (
-            <MediaDropzone key={content.type} kind={content.type} file={content.file} onChange={(file) => onChange({ type: content.type, file })} onReject={onReject} disabled={disabled} />
-          )}
-        </AnimatePresence>
+        {/* Switches instantly: the input area has no transitions. */}
+        {content.type === "text" ? (
+          <TextInput key="text" value={content.text} onChange={(text) => onChange({ type: "text", text })} disabled={disabled} />
+        ) : (
+          <MediaDropzone key={content.type} kind={content.type} file={content.file} onChange={(file) => onChange({ type: content.type, file })} onReject={onReject} disabled={disabled} />
+        )}
       </div>
     </div>
   );

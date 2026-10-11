@@ -1,5 +1,4 @@
-import { motion } from "framer-motion";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 
 interface GenerateButtonProps {
   onClick: () => void;
@@ -7,31 +6,26 @@ interface GenerateButtonProps {
   loading?: boolean;
 }
 
+/** Four-pane Windows flag drawn with CSS so it stays crisp at any size. */
+function WindowsFlag() {
+  return (
+    <span className="grid grid-cols-2 gap-[2px] w-7 h-7 -skew-y-6 shrink-0" aria-hidden="true">
+      <span className="bg-[#f65314] rounded-tl-md" />
+      <span className="bg-[#7cbb00] rounded-tr-md" />
+      <span className="bg-[#00a1f1] rounded-bl-md" />
+      <span className="bg-[#ffbb00] rounded-br-md" />
+    </span>
+  );
+}
+
+/** The create button, styled like the Windows XP "start" button. */
 export default function GenerateButton({ onClick, disabled, loading }: GenerateButtonProps) {
   return (
     <div className="flex justify-center pt-4">
-      <motion.button
-        whileHover={!disabled && !loading ? { scale: 1.05, y: -2 } : {}}
-        whileTap={!disabled && !loading ? { scale: 0.95 } : {}}
-        onClick={onClick}
-        disabled={disabled || loading}
-        className="relative px-8 sm:px-12 py-4 sm:py-5 text-xl sm:text-2xl font-bold text-white overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-        style={{ background: "#0054E3", boxShadow: "0 4px 8px rgba(0,0,0,0.2)" }}
-      >
-        <span className="relative z-10 flex items-center gap-3">
-          {loading ? (
-            <>
-              <LoaderCircle size={28} className="animate-spin" />
-              กำลังสร้าง...
-            </>
-          ) : (
-            <>
-              <Sparkles size={28} />
-              สร้าง Share
-            </>
-          )}
-        </span>
-      </motion.button>
+      <button type="button" onClick={onClick} disabled={disabled || loading} className="xp-start-button">
+        {loading ? <LoaderCircle size={28} className="animate-spin" /> : <WindowsFlag />}
+        <span>{loading ? "กำลังสร้าง..." : "สร้าง Share"}</span>
+      </button>
     </div>
   );
 }

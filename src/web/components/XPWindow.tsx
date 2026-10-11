@@ -49,7 +49,7 @@ export default function XPWindow({ title, children, onMinimize, onClose, closeTi
       <div className="px-3 py-2 flex items-center justify-between gap-2 select-none" style={{ background: "#0054E3" }}>
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-5 h-5 shrink-0 bg-white flex items-center justify-center text-blue-600 font-bold text-xs">XP</div>
-          <span className="text-white font-semibold text-sm drop-shadow-lg truncate">{title}</span>
+          <span className="xp-title text-white font-bold text-sm drop-shadow-lg truncate">{title}</span>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">

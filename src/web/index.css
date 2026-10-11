@@ -2,8 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Windows XP (2001) fonts: Tahoma for UI text, Trebuchet MS for title bars and headings.
+   Phones without them fall back to Verdana/system sans; Tahoma also covers Thai on Windows. */
 :root {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: Tahoma, Verdana, 'Leelawadee UI', 'Noto Sans Thai', sans-serif;
+}
+
+h1, h2, h3, .xp-title {
+  font-family: 'Trebuchet MS', Tahoma, 'Leelawadee UI', 'Noto Sans Thai', sans-serif;
 }
 
 body {
@@ -26,6 +32,31 @@ body {
     @apply px-4 py-2 font-semibold text-gray-800 border-2 border-t-white border-l-white border-r-gray-600 border-b-gray-600;
     background: #ECE9D8;
     box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.1), inset -1px -1px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  /* The Windows XP "start" button: glossy green, rounded on the right. */
+  .xp-start-button {
+    @apply relative inline-flex items-center gap-3 pl-5 pr-10 py-3 text-white font-bold italic select-none;
+    font-family: 'Trebuchet MS', Tahoma, 'Leelawadee UI', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.01em;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.55);
+    border-radius: 6px 28px 28px 6px;
+    border: 1px solid #1f6b1c;
+    background: linear-gradient(180deg, #6ec867 0%, #3aa636 18%, #2f9a2b 50%, #268a23 51%, #2f9a2b 85%, #49b544 100%);
+    box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.55), inset -1px -2px 3px rgba(0, 0, 0, 0.25), 2px 3px 6px rgba(0, 0, 0, 0.35);
+  }
+
+  .xp-start-button:hover:not(:disabled) {
+    background: linear-gradient(180deg, #82d67b 0%, #4cb847 18%, #3caa37 50%, #30992c 51%, #3caa37 85%, #5cc456 100%);
+  }
+
+  .xp-start-button:active:not(:disabled) {
+    box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.45);
+  }
+
+  .xp-start-button:disabled {
+    @apply opacity-60 cursor-not-allowed;
   }
 
   .xp-panel {

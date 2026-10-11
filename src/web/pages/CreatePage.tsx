@@ -17,9 +17,9 @@ type State = "idle" | "creating" | "shattering";
 
 function HowItWorks() {
   const rows = [
-    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ข้อความ ภาพ เพลง MP3 วิดีโอ MP4 หรือ PDF ถูกแบ่งให้ผู้รับทุกคนคนละส่วน (เพลงและวิดีโอแบ่งตามช่วงเวลา PDF แบ่งตามหน้า)" },
-    { icon: <Users size={18} />, text: "คุณคือผู้รับ #1 · ทุกคนที่เปิดลิงก์หรือสแกน QR ทำให้ส่วนของทุกคนเล็กลงทันที (สูงสุด 64 คน)" },
-    { icon: <Clock size={18} />, text: "แก้ต้นฉบับไม่ได้ · share หมดอายุใน 24 ชั่วโมง หรือเมื่อคุณกด End share" },
+    { icon: <Scissors size={18} />, text: "Share แปลว่าหาร: ทุกคนได้คนละส่วน" },
+    { icon: <Users size={18} />, text: "ยิ่งคนเข้ามาก ยิ่งได้น้อย (สูงสุด 64 คน)" },
+    { icon: <Clock size={18} />, text: "หมดอายุใน 24 ชม. หรือกด End share" },
   ];
   return (
     <div className="space-y-4">
