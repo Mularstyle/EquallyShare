@@ -52,7 +52,7 @@ function ClosedView({ phase, onHome }: { phase: SharePhase & { kind: "closed" };
         </div>
       </div>
       <div className="flex justify-end">
-        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={onHome} className="xp-button">สร้าง Share ใหม่</motion.button>
+        <button type="button" onClick={onHome} className="xp-button-silver">สร้าง Share ใหม่</button>
       </div>
     </div>
   );
@@ -136,16 +136,16 @@ export default function SharePage({ shareId, onHome, onMinimize, onTitle }: Shar
                 <SharePanel shareUrl={shareUrl} />
                 {snapshot.recipientNumber === 1 && (
                   <div className="space-y-2">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                    {/* Same silver style as the other buttons; red label because ending cannot be undone. */}
+                    <button
+                      type="button"
                       onClick={() => void handleEnd()}
                       disabled={ending}
-                      className="w-full bg-gradient-to-b from-red-400 to-red-600 hover:from-red-300 hover:to-red-500 text-white font-semibold py-3 px-6 shadow-xp border-2 border-red-700 flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="w-full xp-button-silver !text-red-700 flex items-center justify-center gap-2"
                     >
                       {ending ? <LoaderCircle size={18} className="animate-spin" /> : <Power size={18} />}
                       End share
-                    </motion.button>
+                    </button>
                     {endError && <p role="alert" className="text-sm text-red-700">{endError}</p>}
                   </div>
                 )}

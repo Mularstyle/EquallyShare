@@ -79,7 +79,7 @@ export default function MediaDropzone({ kind, file, onChange, onReject, disabled
             <p className="text-lg font-semibold text-gray-700">{isDragging ? "วางไฟล์ที่นี่" : text.drop}</p>
             <p className="text-sm text-gray-500 mt-1">{text.hint}</p>
           </div>
-          <label className="xp-button cursor-pointer">
+          <label className="xp-button-silver inline-flex items-center">
             <Upload size={16} className="inline mr-2" />
             {text.browse}
             <input type="file" onChange={handleInput} disabled={disabled} className="hidden" accept={text.accept} />

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import QRCode from "qrcode";
 
@@ -39,9 +38,9 @@ export default function SharePanel({ shareUrl }: SharePanelProps) {
         <ExternalLink size={16} className="text-blue-500 shrink-0" />
         <code className="flex-1 text-xs font-mono text-gray-800 break-all select-all">{shareUrl}</code>
       </div>
-      <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={copy} className="w-full xp-button flex items-center justify-center gap-2">
+      <button type="button" onClick={copy} className="w-full xp-button-silver flex items-center justify-center gap-2">
         {copied ? <><Check size={18} /> Copied!</> : <><Copy size={18} /> COPY URL</>}
-      </motion.button>
+      </button>
     </div>
   );
 }
