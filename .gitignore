@@ -7,3 +7,23 @@ data/
 .env
 .env.*
 !.env.example
+
+# Local AI context, plans, and handoff artifacts
+.superpowers/
+.superpower/
+.agents/
+.claude/
+.cursor/
+AGENTS.md
+AGENT.md
+Project.md
+PROJECT.md
+TODO.md
+plan.md
+PLAN.md
+CLAUDE.md
+GEMINI.md
+CHANGELOG.md
+docs/decisions.md
+docs/superpowers/
+outputs/
